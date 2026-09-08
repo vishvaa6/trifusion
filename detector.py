@@ -14,6 +14,8 @@ from config import (
     CONFIDENCE_THRESHOLD,
     DOORS,
     MODEL_NAME,
+    TRANSPARENT_CLASSES,
+    TRANSPARENT_CONFIDENCE_THRESHOLD,
     USE_HALF_PRECISION,
 )
 
@@ -70,8 +72,8 @@ REFINED_OBJECT_INFO: Dict[str, dict] = {
         "proper_name": "Eyeglasses / Shades / Lanyard",
         "category": "ACCESSORIES",
         "door_id": None,
-        "aliases": ["glasses", "eyeglasses", "sunglasses", "spectacles", "shades", "lanyard", "tie", "necktie"],
-        "description": "Eyewear, sunglasses, reading glasses, lanyards and ties",
+        "aliases": ["glasses", "eyeglasses", "sunglasses", "spectacles", "shades", "clear glasses", "reading glasses", "lanyard", "tie", "necktie"],
+        "description": "Clear eyeglasses, reading glasses, sunglasses, lanyards and neckties",
         "icon": "fa-glasses"
     },
     "handbag": {
@@ -115,19 +117,19 @@ REFINED_OBJECT_INFO: Dict[str, dict] = {
         "icon": "fa-utensils"
     },
     "bottle": {
-        "proper_name": "Water Bottle / Flask / Can",
+        "proper_name": "Clear Bottle / Flask / Can",
         "category": "HAZARD",
         "door_id": 1,
-        "aliases": ["bottle", "water bottle", "thermos", "flask", "beverage bottle", "tumbler", "soda can"],
-        "description": "Reusable water bottles, metal flasks, glass bottles and drink containers",
+        "aliases": ["bottle", "water bottle", "plastic bottle", "pet bottle", "glass bottle", "transparent bottle", "clear bottle", "thermos", "flask", "beverage bottle", "tumbler", "soda can", "jar"],
+        "description": "Clear plastic water bottles, glass bottles, metal flasks and drink containers",
         "icon": "fa-bottle-water"
     },
     "cup": {
-        "proper_name": "Coffee Mug / Tea Cup",
+        "proper_name": "Glass Tumbler / Cup / Mug",
         "category": "RECYCLABLE",
         "door_id": 4,
-        "aliases": ["cup", "mug", "coffee mug", "tea cup", "drinkware", "tumbler", "glass"],
-        "description": "Coffee mugs, tea cups, paper cups and drinkware",
+        "aliases": ["cup", "glass", "tumbler", "clear cup", "plastic cup", "glass cup", "coffee mug", "tea cup", "drinkware", "mug"],
+        "description": "Glass tumblers, transparent plastic cups, coffee mugs, tea cups and drinkware",
         "icon": "fa-mug-hot"
     },
     "cell phone": {
@@ -195,20 +197,28 @@ REFINED_OBJECT_INFO: Dict[str, dict] = {
         "icon": "fa-wind"
     },
     "wine glass": {
-        "proper_name": "Wine Glass / Stemware",
+        "proper_name": "Wine Glass / Glassware",
         "category": "RECYCLABLE",
         "door_id": 4,
-        "aliases": ["wine glass", "goblet", "stemware", "glass cup"],
-        "description": "Wine glasses, goblets and glassware",
+        "aliases": ["wine glass", "goblet", "stemware", "glass cup", "glassware", "champagne glass", "clear glass"],
+        "description": "Wine glasses, goblets, champagne flutes and clear glassware",
         "icon": "fa-wine-glass"
     },
     "bowl": {
-        "proper_name": "Bowl / Tableware",
+        "proper_name": "Glass / Tableware Bowl",
         "category": "RECYCLABLE",
         "door_id": 4,
-        "aliases": ["bowl", "salad bowl", "soup bowl", "dish"],
-        "description": "Bowls, food dishes and reusable tableware",
+        "aliases": ["bowl", "glass bowl", "salad bowl", "soup bowl", "dish", "clear bowl", "tableware"],
+        "description": "Glass bowls, clear salad bowls, food dishes and reusable tableware",
         "icon": "fa-bowl-food"
+    },
+    "vase": {
+        "proper_name": "Glass Vase / Vessel",
+        "category": "RECYCLABLE",
+        "door_id": 4,
+        "aliases": ["vase", "glass vase", "flower vase", "glass vessel", "carafe", "decanter", "clear vase"],
+        "description": "Glass vases, decorative carafes, vessels and clear glassware",
+        "icon": "fa-flask"
     }
 }
 
@@ -252,6 +262,14 @@ OBJECT_COLLECTIONS: Dict[str, dict] = {
         "color": "emerald",
         "description": "Bottles, cups, bowls, forks & spoons",
         "classes": ["cup", "fork", "spoon", "bowl", "wine glass", "bottle", "vase"]
+    },
+    "transparency": {
+        "id": "transparency",
+        "name": "Glass & Transparent Items",
+        "icon": "fa-glasses",
+        "color": "cyan",
+        "description": "Clear plastic bottles, glassware, tumblers, cups & vases",
+        "classes": ["bottle", "wine glass", "cup", "bowl", "vase", "tie"]
     },
     "organic": {
         "id": "organic",
@@ -317,12 +335,38 @@ STATIONERY_CLASSES: Set[str] = {
 }
 
 
+def enhance_transparent_clarity(img: np.ndarray) -> np.ndarray:
+    """
+    Enhance specular reflections and refractive boundaries of transparent objects
+    (clear PET bottles, glass tumblers, glassware) using LAB-space CLAHE.
+    Blends 75% CLAHE luminance with 25% original luminance to sharpen faint glass
+    rims and fluid menisci without color cast distortion.
+    """
+    try:
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        cl = clahe.apply(l)
+        l_blend = cv2.addWeighted(cl, 0.75, l, 0.25, 0)
+        enhanced_lab = cv2.merge((l_blend, a, b))
+        return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+    except Exception:
+        return img
+
+
 class WasteDetector:
     """YOLOv8 Edge Inference Engine with GPU optimization and waste stream routing."""
 
-    def __init__(self, model_path: str = MODEL_NAME, conf_threshold: float = CONFIDENCE_THRESHOLD):
+    def __init__(
+        self,
+        model_path: str = MODEL_NAME,
+        conf_threshold: float = CONFIDENCE_THRESHOLD,
+        transparent_conf_threshold: float = TRANSPARENT_CONFIDENCE_THRESHOLD,
+    ):
         self.model_path = model_path
         self.conf_threshold = conf_threshold
+        self.transparent_conf_threshold = transparent_conf_threshold
+        self.transparent_classes = set(TRANSPARENT_CLASSES)
         self.device = "cpu"
         self.use_half = False
         self.model = None
@@ -468,15 +512,27 @@ class WasteDetector:
         if raw_lower == "cell phone":
             return "Smartphone", "E-WASTE", 2
 
-        # 9. Bottle -> Water Bottle / Flask
+        # 9. Bottle -> Clear Water Bottle / Glass Bottle / Flask
         if raw_lower == "bottle":
-            if aspect_ratio > 2.0:
+            if aspect_ratio > 1.8:
                 return "Water Bottle / Flask", "HAZARD", 1
-            return "Bottle / Beverage Can", "HAZARD", 1
+            return "Clear Bottle / Glass Jar", "HAZARD", 1
 
-        # 10. Cup -> Coffee Mug / Drinkware
+        # 10. Cup -> Glass Tumbler / Cup / Mug
         if raw_lower == "cup":
-            return "Coffee Mug / Cup", "RECYCLABLE", 4
+            return "Glass / Cup / Tumbler", "RECYCLABLE", 4
+
+        # 10b. Wine Glass -> Wine Glass / Glassware
+        if raw_lower == "wine glass":
+            return "Wine Glass / Glassware", "RECYCLABLE", 4
+
+        # 10c. Vase -> Glass Vase / Vessel
+        if raw_lower == "vase":
+            return "Glass Vase / Vessel", "RECYCLABLE", 4
+
+        # 10d. Bowl -> Glass / Tableware Bowl
+        if raw_lower == "bowl":
+            return "Glass / Tableware Bowl", "RECYCLABLE", 4
 
         # 11. Knife -> Utility Knife / Box Cutter
         if raw_lower == "knife":
@@ -618,15 +674,21 @@ class WasteDetector:
             return DetectionResult(items=[], has_hazard=False, inference_time_ms=0.0)
 
         try:
+            # 1. Enhance specular rims and refraction boundaries for transparent glass & PET bottles
+            enhanced_frame = enhance_transparent_clarity(frame)
+
+            # 2. Lower prediction threshold so YOLO NMS does not prematurely drop transparent objects
+            inference_conf = min(self.conf_threshold, self.transparent_conf_threshold)
+
             predict_kwargs = {
-                "conf": self.conf_threshold,
+                "conf": inference_conf,
                 "device": self.device,
                 "verbose": False
             }
             if self.use_half:
                 predict_kwargs["half"] = True
 
-            results = self.model(frame, **predict_kwargs)
+            results = self.model(enhanced_frame, **predict_kwargs)
 
             for r in results:
                 boxes = r.boxes
@@ -635,12 +697,15 @@ class WasteDetector:
 
                 for box in boxes:
                     conf = float(box.conf[0])
-                    if conf < self.conf_threshold:
-                        continue
-
                     cls_id = int(box.cls[0])
                     class_name = self.model.names.get(cls_id, f"class_{cls_id}")
                     name_lower = class_name.lower().strip()
+
+                    # Class-specific sensitivity filtering:
+                    # Transparent objects use heightened sensitivity floor (0.20), standard items use threshold (0.40)
+                    min_conf = self.transparent_conf_threshold if (name_lower in self.transparent_classes) else self.conf_threshold
+                    if conf < min_conf:
+                        continue
 
                     # Determine whether this object is selected to have a rectangular frame
                     has_frame = self.is_frame_enabled(name_lower)

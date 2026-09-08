@@ -181,6 +181,42 @@ def test_headless_render():
     print("  -> Passed! Composite SCADA canvas rendered without OpenCV errors.")
 
 
+def test_transparent_object_enhancement():
+    print("[TEST 7/7] Verifying Transparent Object Enhancement & Sensitivity Pipeline...")
+    from detector import enhance_transparent_clarity, OBJECT_COLLECTIONS, TRANSPARENT_CLASSES
+
+    # 1. Test LAB-CLAHE edge enhancement
+    dummy = np.random.randint(50, 200, (480, 640, 3), dtype=np.uint8)
+    enhanced = enhance_transparent_clarity(dummy)
+    assert enhanced.shape == (480, 640, 3), f"Expected shape (480, 640, 3), got {enhanced.shape}"
+    assert enhanced.dtype == np.uint8, f"Expected dtype uint8, got {enhanced.dtype}"
+
+    # 2. Test WasteDetector transparent parameters
+    detector = WasteDetector()
+    assert detector.transparent_conf_threshold <= 0.25, f"Expected transparent threshold <= 0.25, got {detector.transparent_conf_threshold}"
+    for cls in ["bottle", "wine glass", "cup", "bowl", "vase"]:
+        assert cls in detector.transparent_classes, f"Expected '{cls}' in transparent classes"
+
+    # 3. Test transparent label refinements
+    b_label, b_cat, b_door = detector.refine_label("bottle", (100, 100, 200, 450))
+    assert "Bottle" in b_label and b_door == 1, f"Bottle refinement failed: {b_label}"
+
+    c_label, c_cat, c_door = detector.refine_label("cup", (100, 100, 250, 250))
+    assert ("Glass" in c_label or "Cup" in c_label) and c_door == 4, f"Cup refinement failed: {c_label}"
+
+    w_label, w_cat, w_door = detector.refine_label("wine glass", (100, 100, 200, 400))
+    assert "Wine Glass" in w_label and w_door == 4, f"Wine glass refinement failed: {w_label}"
+
+    v_label, v_cat, v_door = detector.refine_label("vase", (100, 100, 200, 400))
+    assert "Vase" in v_label and v_door == 4, f"Vase refinement failed: {v_label}"
+
+    # 4. Test transparency collection in catalog
+    assert "transparency" in OBJECT_COLLECTIONS
+    assert "bottle" in OBJECT_COLLECTIONS["transparency"]["classes"]
+
+    print("  -> Passed! Transparent CLAHE enhancement, sensitivity floor, and glassware labels verified.")
+
+
 if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("    RUNNING AI WASTE SEGREGATION INTEGRATION TESTS")
@@ -192,7 +228,8 @@ if __name__ == "__main__":
     test_conveyor_simulator()
     test_hazard_logger()
     test_headless_render()
+    test_transparent_object_enhancement()
 
     print("\n" + "=" * 60)
-    print("    ALL INTEGRATION TESTS PASSED SUCCESSFULLY! [6/6]")
+    print("    ALL INTEGRATION TESTS PASSED SUCCESSFULLY! [7/7]")
     print("=" * 60 + "\n")

@@ -215,38 +215,86 @@
                 </div>
             </div>
 
-            <!-- 5 SIMULATION SORTING DOORS (Clean, Modern Interactive Cards) -->
-            <div class="bg-panelbg border border-gray-800/80 rounded-2xl p-4 shadow-xl">
-                <div class="flex items-center justify-between mb-3">
-                    <h2 class="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2 font-mono">
-                        <i class="fa-solid fa-door-open text-cyan-400"></i>
-                        Automated Sorting Chutes (Doors 1 - 5)
-                    </h2>
-                    <span class="text-[11px] text-gray-500 font-mono">Click "Test" on any door to actuate</span>
+            <!-- REAL-TIME CLASSIFIED DETECTIONS LOG STREAM (Spans wide under camera) -->
+            <div class="bg-panelbg border border-gray-800/80 rounded-2xl p-4 shadow-xl flex flex-col">
+                
+                <!-- HEADER WITH SORTED TOTAL & TRANSPARENCY ENHANCEMENT STATUS -->
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-gray-800/80 flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-emerald-400 text-sm"></i>
+                        <h2 class="text-xs font-bold text-gray-100 uppercase tracking-wider font-mono">
+                            Live Classified Detections Log
+                        </h2>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/40">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1.5"></span>
+                            LIVE STREAM
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 font-mono">
+                        <span class="text-[10px] bg-cyan-950/70 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded hidden sm:inline" title="LAB CLAHE active for transparent bottles, glass & stemware">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Transparent Clarity: ON
+                        </span>
+                        <span class="text-xs bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-bold" id="totalSortedCount">
+                            Total: 0
+                        </span>
+                    </div>
                 </div>
 
-                <!-- 5 DOORS GRID -->
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" id="doorsGrid">
+                <!-- STREAM TIMELINE GRID (2-Column Responsive Grid) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 overflow-y-auto max-h-[380px] pr-1 font-mono text-xs" id="classifiedItemsList">
+                    <div class="col-span-full text-center py-16 text-gray-500 text-xs">
+                        <i class="fa-solid fa-camera-viewfinder text-3xl mb-2 text-gray-600 block"></i>
+                        <p>Waiting for items to be presented to camera...</p>
+                        <p class="text-[10px] text-gray-600 mt-1">Hold any waste item, transparent bottle, or glassware up to your Camo / Webcam</p>
+                    </div>
+                </div>
+
+                <!-- FOOTER TELEMETRY & SENSITIVITY INDICATOR -->
+                <div class="pt-3 mt-3 border-t border-gray-800/80 flex items-center justify-between text-[11px] text-gray-500 font-mono flex-wrap gap-2">
+                    <span>Engine: <strong class="text-emerald-400">YOLO11n FP16</strong></span>
+                    <span>Transparent Sensitivity: <strong class="text-cyan-400">&ge; 20% (CLAHE Specular)</strong></span>
+                    <span>Standard Objects: <strong class="text-gray-300">&ge; 40%</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: 5 AUTOMATED SORTING CHUTE DOORS (4 COLS) -->
+        <div class="xl:col-span-4 flex flex-col">
+            <div class="bg-panelbg border border-gray-800/80 rounded-2xl p-4 shadow-2xl flex flex-col h-full">
+                
+                <!-- HEADER -->
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-gray-800/80">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-door-open text-cyan-400 text-sm"></i>
+                        <h2 class="text-xs font-bold text-gray-100 uppercase tracking-wider font-mono">
+                            Sorting Chutes (Doors 1 - 5)
+                        </h2>
+                    </div>
+                    <span class="text-[10px] text-gray-500 font-mono">Click "Test" to open</span>
+                </div>
+
+                <!-- 5 DOORS VERTICAL STACK -->
+                <div class="space-y-3 flex-1 overflow-y-auto pr-1" id="doorsGrid">
                     
                     <!-- DOOR 1: HAZARD -->
                     <div id="doorCard-1" class="bg-cardbg border border-red-500/40 hover:border-red-400 rounded-xl p-3 transition-all flex flex-col justify-between shadow-sm">
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
                                 <span class="text-[10px] font-bold font-mono text-gray-400">DOOR 1</span>
-                                <span id="doorBadge-1" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                                <span id="doorBadge-1" class="text-[9px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
                             </div>
                             <div class="text-xs font-bold text-red-400 flex items-center gap-1.5 mb-0.5">
                                 <i class="fa-solid fa-biohazard"></i> HAZARD
                             </div>
-                            <div class="text-[10px] text-gray-400 truncate">Knife, Scissors, Glass</div>
+                            <div class="text-[10px] text-gray-400 truncate">Knife, Scissors, Glass Bottles, Sharps</div>
                         </div>
                         <div class="pt-2 mt-2 border-t border-gray-800/80 flex items-center justify-between">
                             <div>
-                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS</span>
+                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS SORTED</span>
                                 <span id="doorCount-1" class="text-sm font-bold text-gray-100 font-mono">0</span>
                             </div>
                             <button onclick="triggerDoor(1)" title="Test Door 1 actuator"
-                                class="px-2 py-1 rounded bg-red-950/60 hover:bg-red-900 border border-red-500/40 text-[10px] text-red-300 font-mono font-semibold transition active:scale-95">
+                                class="px-2.5 py-1 rounded bg-red-950/60 hover:bg-red-900 border border-red-500/40 text-[10px] text-red-300 font-mono font-semibold transition active:scale-95">
                                 Test
                             </button>
                         </div>
@@ -258,20 +306,20 @@
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
                                 <span class="text-[10px] font-bold font-mono text-gray-400">DOOR 2</span>
-                                <span id="doorBadge-2" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                                <span id="doorBadge-2" class="text-[9px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
                             </div>
                             <div class="text-xs font-bold text-cyan-400 flex items-center gap-1.5 mb-0.5">
                                 <i class="fa-solid fa-microchip"></i> E-WASTE
                             </div>
-                            <div class="text-[10px] text-gray-400 truncate">Phone, Laptop, Board</div>
+                            <div class="text-[10px] text-gray-400 truncate">Phone, Laptop, Mouse, Keyboard, Remote</div>
                         </div>
                         <div class="pt-2 mt-2 border-t border-gray-800/80 flex items-center justify-between">
                             <div>
-                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS</span>
+                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS SORTED</span>
                                 <span id="doorCount-2" class="text-sm font-bold text-gray-100 font-mono">0</span>
                             </div>
                             <button onclick="triggerDoor(2)" title="Test Door 2 actuator"
-                                class="px-2 py-1 rounded bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-500/40 text-[10px] text-cyan-300 font-mono font-semibold transition active:scale-95">
+                                class="px-2.5 py-1 rounded bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-500/40 text-[10px] text-cyan-300 font-mono font-semibold transition active:scale-95">
                                 Test
                             </button>
                         </div>
@@ -283,20 +331,20 @@
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
                                 <span class="text-[10px] font-bold font-mono text-gray-400">DOOR 3</span>
-                                <span id="doorBadge-3" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                                <span id="doorBadge-3" class="text-[9px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
                             </div>
                             <div class="text-xs font-bold text-yellow-400 flex items-center gap-1.5 mb-0.5">
                                 <i class="fa-solid fa-book-open"></i> PAPER &amp; STATIONERY
                             </div>
-                            <div class="text-[10px] text-gray-400 truncate">Books, Scissors, Paper, Bags</div>
+                            <div class="text-[10px] text-gray-400 truncate">Books, Scissors, Pens, Notebooks, Bags</div>
                         </div>
                         <div class="pt-2 mt-2 border-t border-gray-800/80 flex items-center justify-between">
                             <div>
-                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS</span>
+                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS SORTED</span>
                                 <span id="doorCount-3" class="text-sm font-bold text-gray-100 font-mono">0</span>
                             </div>
                             <button onclick="triggerDoor(3)" title="Test Door 3 actuator"
-                                class="px-2 py-1 rounded bg-yellow-950/60 hover:bg-yellow-900 border border-yellow-500/40 text-[10px] text-yellow-300 font-mono font-semibold transition active:scale-95">
+                                class="px-2.5 py-1 rounded bg-yellow-950/60 hover:bg-yellow-900 border border-yellow-500/40 text-[10px] text-yellow-300 font-mono font-semibold transition active:scale-95">
                                 Test
                             </button>
                         </div>
@@ -308,20 +356,20 @@
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
                                 <span class="text-[10px] font-bold font-mono text-gray-400">DOOR 4</span>
-                                <span id="doorBadge-4" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                                <span id="doorBadge-4" class="text-[9px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
                             </div>
                             <div class="text-xs font-bold text-emerald-400 flex items-center gap-1.5 mb-0.5">
                                 <i class="fa-solid fa-bottle-water"></i> RECYCLABLE
                             </div>
-                            <div class="text-[10px] text-gray-400 truncate">Cup, Can, Tableware</div>
+                            <div class="text-[10px] text-gray-400 truncate">Glasses, Cups, Tumblers, Cans, Tableware</div>
                         </div>
                         <div class="pt-2 mt-2 border-t border-gray-800/80 flex items-center justify-between">
                             <div>
-                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS</span>
+                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS SORTED</span>
                                 <span id="doorCount-4" class="text-sm font-bold text-gray-100 font-mono">0</span>
                             </div>
                             <button onclick="triggerDoor(4)" title="Test Door 4 actuator"
-                                class="px-2 py-1 rounded bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/40 text-[10px] text-emerald-300 font-mono font-semibold transition active:scale-95">
+                                class="px-2.5 py-1 rounded bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/40 text-[10px] text-emerald-300 font-mono font-semibold transition active:scale-95">
                                 Test
                             </button>
                         </div>
@@ -333,20 +381,20 @@
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
                                 <span class="text-[10px] font-bold font-mono text-gray-400">DOOR 5</span>
-                                <span id="doorBadge-5" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                                <span id="doorBadge-5" class="text-[9px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
                             </div>
                             <div class="text-xs font-bold text-orange-400 flex items-center gap-1.5 mb-0.5">
                                 <i class="fa-solid fa-apple-whole"></i> ORGANIC
                             </div>
-                            <div class="text-[10px] text-gray-400 truncate">Food, Fruit, Scraps</div>
+                            <div class="text-[10px] text-gray-400 truncate">Food, Fruits, Vegetables, Scraps</div>
                         </div>
                         <div class="pt-2 mt-2 border-t border-gray-800/80 flex items-center justify-between">
                             <div>
-                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS</span>
+                                <span class="text-[9px] text-gray-500 font-mono block">ITEMS SORTED</span>
                                 <span id="doorCount-5" class="text-sm font-bold text-gray-100 font-mono">0</span>
                             </div>
                             <button onclick="triggerDoor(5)" title="Test Door 5 actuator"
-                                class="px-2 py-1 rounded bg-orange-950/60 hover:bg-orange-900 border border-orange-500/40 text-[10px] text-orange-300 font-mono font-semibold transition active:scale-95">
+                                class="px-2.5 py-1 rounded bg-orange-950/60 hover:bg-orange-900 border border-orange-500/40 text-[10px] text-orange-300 font-mono font-semibold transition active:scale-95">
                                 Test
                             </button>
                         </div>
@@ -354,39 +402,11 @@
                     </div>
 
                 </div>
-            </div>
-        </div>
 
-        <!-- RIGHT COLUMN: REAL-TIME CLASSIFIED OBJECTS STREAM (4 COLS) -->
-        <div class="xl:col-span-4 flex flex-col">
-            <div class="bg-panelbg border border-gray-800/80 rounded-2xl p-4 shadow-2xl flex flex-col h-full min-h-[580px]">
-                
-                <!-- HEADER WITH SORTED TOTAL -->
-                <div class="flex items-center justify-between pb-3 mb-3 border-b border-gray-800/80">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-list-check text-emerald-400"></i>
-                        <h2 class="text-xs font-bold text-gray-100 uppercase tracking-wider font-mono">
-                            Classified Detections
-                        </h2>
-                    </div>
-                    <span class="text-xs bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-mono font-bold" id="totalSortedCount">
-                        Total: 0
-                    </span>
-                </div>
-
-                <!-- STREAM TIMELINE (Scrollable) -->
-                <div class="space-y-2 overflow-y-auto max-h-[640px] pr-1 flex-1 font-mono text-xs" id="classifiedItemsList">
-                    <div class="text-center py-24 text-gray-500 text-xs">
-                        <i class="fa-solid fa-camera-viewfinder text-3xl mb-2 text-gray-600 block"></i>
-                        <p>Waiting for items to be presented to camera...</p>
-                        <p class="text-[10px] text-gray-600 mt-1">Hold an item up to your Camo / Webcam</p>
-                    </div>
-                </div>
-
-                <!-- FOOTER TIP -->
+                <!-- RIGHT FOOTER -->
                 <div class="pt-3 mt-3 border-t border-gray-800/80 flex items-center justify-between text-[11px] text-gray-500 font-mono">
-                    <span>Active Model: <strong class="text-gray-300">YOLO11n</strong></span>
-                    <span>Confidence: <strong class="text-cyan-400">&ge; 40%</strong></span>
+                    <span>Sorting System: <strong class="text-gray-300">5 Active Chutes</strong></span>
+                    <span>Diverter: <strong class="text-cyan-400">Pneumatic</strong></span>
                 </div>
             </div>
         </div>
@@ -619,6 +639,9 @@
                 'HAZARD': { color: 'text-red-400', border: 'border-red-500/50', icon: 'fa-triangle-exclamation', bg: 'bg-red-950/30' },
                 'E-WASTE': { color: 'text-cyan-400', border: 'border-cyan-500/50', icon: 'fa-microchip', bg: 'bg-cyan-950/30' },
                 'PAPER': { color: 'text-yellow-400', border: 'border-yellow-500/50', icon: 'fa-box-archive', bg: 'bg-yellow-950/30' },
+                'PAPER & STATIONERY': { color: 'text-yellow-400', border: 'border-yellow-500/50', icon: 'fa-book-open', bg: 'bg-yellow-950/30' },
+                'STATIONERY': { color: 'text-amber-400', border: 'border-amber-500/50', icon: 'fa-pen-ruler', bg: 'bg-amber-950/30' },
+                'ACCESSORIES': { color: 'text-purple-400', border: 'border-purple-500/50', icon: 'fa-glasses', bg: 'bg-purple-950/30' },
                 'RECYCLABLE': { color: 'text-emerald-400', border: 'border-emerald-500/50', icon: 'fa-bottle-water', bg: 'bg-emerald-950/30' },
                 'ORGANIC': { color: 'text-orange-400', border: 'border-orange-500/50', icon: 'fa-apple-whole', bg: 'bg-orange-950/30' },
                 'NON-WASTE': { color: 'text-gray-400', border: 'border-gray-700', icon: 'fa-ban', bg: 'bg-gray-900/40' }
