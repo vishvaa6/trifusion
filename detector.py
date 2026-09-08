@@ -6,7 +6,7 @@ Wraps Ultralytics YOLOv8 with FP16 CUDA acceleration for RTX 3050,
 
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import cv2
 import numpy as np
 
@@ -50,6 +50,7 @@ class WasteDetector:
         self.use_half = False
         self.model = None
         self.is_ready = False
+        self.enabled_classes: Optional[Set[str]] = None  # None means all 80 classes enabled
 
         self._initialize_model()
 
@@ -97,37 +98,74 @@ class WasteDetector:
             pass
         return 0.0
 
-    def classify_to_door(self, class_name: str) -> int:
-        """Map object class name to assigned Door ID (1 to 5)."""
+    def get_category_info(self, class_name: str) -> Tuple[Optional[int], str, Tuple[int, int, int], bool]:
+        """
+        Return (door_id, category_name, color_bgr, is_hazard).
+        If non-waste/ambient (like person, chair, dog), returns (None, 'NON-WASTE', (140, 145, 155), False).
+        """
         name_lower = class_name.lower().strip()
 
         # Check Door 1 (Hazard) first
         for target in DOORS[1].target_classes:
             if target in name_lower:
-                return 1
+                return 1, DOORS[1].category, DOORS[1].color_bgr, True
 
         # Check Door 2 (E-Waste)
         for target in DOORS[2].target_classes:
             if target in name_lower:
-                return 2
+                return 2, DOORS[2].category, DOORS[2].color_bgr, False
 
         # Check Door 3 (Paper)
         for target in DOORS[3].target_classes:
             if target in name_lower:
-                return 3
+                return 3, DOORS[3].category, DOORS[3].color_bgr, False
 
         # Check Door 5 (Organic)
         for target in DOORS[5].target_classes:
             if target in name_lower:
-                return 5
+                return 5, DOORS[5].category, DOORS[5].color_bgr, False
 
         # Check Door 4 (Recyclable)
         for target in DOORS[4].target_classes:
             if target in name_lower:
-                return 4
+                return 4, DOORS[4].category, DOORS[4].color_bgr, False
 
-        # Default fallback for unknown items -> Door 4 (Recyclable)
-        return 4
+        return None, "NON-WASTE", (140, 145, 155), False
+
+    def classify_to_door(self, class_name: str) -> int:
+        """Map object class name to assigned Door ID (1 to 5). Fallback to 4 for backwards compatibility."""
+        door_id, _, _, _ = self.get_category_info(class_name)
+        return door_id if door_id is not None else 4
+
+    def set_enabled_classes(self, classes: Optional[List[str]]) -> None:
+        """Update allowed classes. Pass None to enable all classes."""
+        if classes is None:
+            self.enabled_classes = None
+        else:
+            self.enabled_classes = {c.lower().strip() for c in classes}
+
+    def get_class_catalog(self) -> List[dict]:
+        """
+        Returns full list of 80 classes with metadata:
+        id, name, door_id, category, is_hazard, is_waste, is_enabled
+        """
+        if not self.is_ready or self.model is None:
+            return []
+        catalog = []
+        for cls_id, name in self.model.names.items():
+            name_lower = name.lower().strip()
+            door_id, cat, color, is_haz = self.get_category_info(name_lower)
+            is_enabled = True if self.enabled_classes is None else (name_lower in self.enabled_classes)
+            catalog.append({
+                "id": int(cls_id),
+                "name": name,
+                "door_id": door_id,
+                "category": cat,
+                "is_hazard": is_haz,
+                "is_waste": (door_id is not None),
+                "is_enabled": is_enabled
+            })
+        return catalog
 
     def detect(self, frame: np.ndarray, offset_x: int = 0, offset_y: int = 0) -> DetectionResult:
         """
@@ -165,6 +203,11 @@ class WasteDetector:
 
                     cls_id = int(box.cls[0])
                     class_name = self.model.names.get(cls_id, f"class_{cls_id}")
+                    name_lower = class_name.lower().strip()
+
+                    # Check if this class is toggled off / filtered out
+                    if self.enabled_classes is not None and name_lower not in self.enabled_classes:
+                        continue
 
                     # Coordinate bounding box
                     xyxy = box.xyxy[0].cpu().numpy()
@@ -174,10 +217,7 @@ class WasteDetector:
                     y2 = int(xyxy[3]) + offset_y
 
                     # Determine Door & Category
-                    door_id = self.classify_to_door(class_name)
-                    door_info = DOORS[door_id]
-                    is_hazard = (door_id == 1)
-
+                    door_id, category, color_bgr, is_hazard = self.get_category_info(name_lower)
                     if is_hazard:
                         has_hazard = True
 
@@ -188,9 +228,9 @@ class WasteDetector:
                         class_name=class_name,
                         confidence=conf,
                         bbox=(x1, y1, x2, y2),
-                        door_id=door_id,
-                        category=door_info.category,
-                        color_bgr=door_info.color_bgr,
+                        door_id=door_id if door_id is not None else 0,
+                        category=category,
+                        color_bgr=color_bgr,
                         is_hazard=is_hazard,
                         center_pos=(center_x, center_y)
                     ))

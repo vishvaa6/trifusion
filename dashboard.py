@@ -13,7 +13,7 @@ from collections import deque
 from datetime import datetime
 from typing import Dict, List, Optional
 import cv2
-from flask import Flask, Response, jsonify, render_template, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file
 import numpy as np
 
 from config import (
@@ -237,7 +237,7 @@ def camera_worker():
                 x1, y1, x2, y2 = item.bbox
                 color = item.color_bgr
                 door_id = item.door_id
-                door_info = DOORS[door_id]
+                cat_name = item.category
 
                 # Bounding box
                 box_thickness = 3 if item.is_hazard else 2
@@ -252,7 +252,7 @@ def camera_worker():
 
                 # Label banner
                 conf_pct = int(item.confidence * 100)
-                tag_text = f"[{door_info.category}] {item.class_name.upper()} {conf_pct}%"
+                tag_text = f"[{cat_name}] {item.class_name.upper()} {conf_pct}%"
                 (tw, th), _ = cv2.getTextSize(tag_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
 
                 cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 10, y1), (20, 20, 24), -1)
@@ -260,7 +260,10 @@ def camera_worker():
                 cv2.putText(frame, tag_text, (x1 + 5, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
 
                 # Door routing hint under box
-                dest_text = f"ROUTE -> DOOR {door_id} ({door_info.category})"
+                if door_id and door_id in DOORS:
+                    dest_text = f"ROUTE -> DOOR {door_id} ({DOORS[door_id].category})"
+                else:
+                    dest_text = "NON-WASTE OBJECT"
                 cv2.putText(frame, dest_text, (x1 + 2, min(WEBCAM_HEIGHT - 6, y2 + 16)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1)
 
@@ -271,22 +274,23 @@ def camera_worker():
                 if (current_time - last_seen) > 1.5:
                     state.last_detection_timestamps[item.class_name] = current_time
 
-                    # Trigger Door Shutter to Open in Real-Time
-                    door_system.get_door(door_id).trigger_open(item.class_name)
-                    logger.record_sorted_item(door_id)
+                    # Only actuate doors if mapped to an actual waste stream (Doors 1 - 5)
+                    if door_id and door_id in DOORS:
+                        door_system.get_door(door_id).trigger_open(item.class_name)
+                        logger.record_sorted_item(door_id)
 
-                    # If Hazard -> Trigger Lockout & Log
-                    if item.is_hazard:
-                        logger.log_hazard(item.class_name, item.confidence, item.bbox, door_id=1)
-                        with state.lock:
-                            state.last_hazard_class = item.class_name
-                            state.last_hazard_conf = item.confidence
+                        # If Hazard -> Trigger Lockout & Log
+                        if item.is_hazard:
+                            logger.log_hazard(item.class_name, item.confidence, item.bbox, door_id=1)
+                            with state.lock:
+                                state.last_hazard_class = item.class_name
+                                state.last_hazard_conf = item.confidence
 
                     # Add to Classified Objects Feed
                     item_entry = {
                         "name": item.class_name.title(),
-                        "category": door_info.category,
-                        "door_id": door_id,
+                        "category": cat_name,
+                        "door_id": door_id if door_id else 0,
                         "confidence": round(item.confidence, 2),
                         "time": datetime.now().strftime("%H:%M:%S"),
                         "source": "REAL CAMERA"
@@ -410,6 +414,62 @@ def api_rescan_cameras():
         "success": True,
         "active_camera_id": state.active_camera_id,
         "available_cameras": cams
+    })
+
+
+@app.route('/api/object_filters', methods=['GET', 'POST'])
+def api_object_filters():
+    """Retrieve or update active object detection filters."""
+    if request.method == 'POST':
+        data = request.get_json(force=True, silent=True) or {}
+        enabled_list = data.get('enabled_classes', None)
+        detector.set_enabled_classes(enabled_list)
+        catalog = detector.get_class_catalog()
+        enabled_count = len([c for c in catalog if c["is_enabled"]])
+        return jsonify({
+            "success": True,
+            "enabled_count": enabled_count,
+            "total_count": len(catalog)
+        })
+
+    catalog = detector.get_class_catalog()
+    enabled_count = len([c for c in catalog if c["is_enabled"]])
+    return jsonify({
+        "catalog": catalog,
+        "enabled_count": enabled_count,
+        "total_count": len(catalog)
+    })
+
+
+@app.route('/api/filter_preset/<preset>')
+def api_filter_preset(preset: str):
+    """Apply preset object filters (all, waste_only, hazard_only, clear)."""
+    preset_lower = preset.lower().strip()
+    if preset_lower == 'all':
+        detector.set_enabled_classes(None)
+    elif preset_lower == 'waste_only':
+        # Enable all classes mapped to Doors 1-5 (waste streams)
+        waste_classes = []
+        for door in DOORS.values():
+            waste_classes.extend(door.target_classes)
+        extra_waste = ["cell phone", "laptop", "mouse", "keyboard", "remote", "bottle", "wine glass",
+                       "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
+                       "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "book", "scissors"]
+        detector.set_enabled_classes(list(set(waste_classes + extra_waste)))
+    elif preset_lower == 'hazard_only':
+        detector.set_enabled_classes(list(DOORS[1].target_classes))
+    elif preset_lower == 'clear':
+        detector.set_enabled_classes([])
+    else:
+        return jsonify({"error": f"Unknown preset '{preset}'"}), 400
+
+    catalog = detector.get_class_catalog()
+    enabled_count = len([c for c in catalog if c["is_enabled"]])
+    return jsonify({
+        "success": True,
+        "preset": preset_lower,
+        "enabled_count": enabled_count,
+        "total_count": len(catalog)
     })
 
 

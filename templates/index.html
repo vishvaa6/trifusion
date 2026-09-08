@@ -87,6 +87,15 @@
 
             <!-- Action Controls -->
             <div class="flex items-center gap-1.5 pl-1 border-l border-gray-800">
+                <!-- LABEL FILTERS MODAL BUTTON -->
+                <button onclick="openFilterModal()" title="Configure objects to label and detect"
+                    class="px-2.5 py-1.5 rounded-lg bg-cyan-950/70 hover:bg-cyan-900 active:scale-95 text-cyan-300 border border-cyan-500/40 text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-sliders text-[10px]"></i>
+                    <span>Label Filters</span>
+                    <span id="filterCountBadge" class="bg-cyan-500/20 text-cyan-200 text-[10px] px-1.5 py-0.2 rounded-full font-mono border border-cyan-500/30">
+                        80
+                    </span>
+                </button>
                 <button onclick="togglePause()" id="btnPause" title="Pause/Resume AI inference"
                     class="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white border border-gray-700 text-xs font-semibold transition flex items-center gap-1.5">
                     <i class="fa-solid fa-pause text-[10px]"></i>
@@ -139,6 +148,10 @@
                         <span>Live AI Camera Feed</span>
                         <span id="scannerStatusBadge" class="text-[10px] bg-emerald-900/60 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-mono font-bold ml-1">
                             SCANNER ACTIVE
+                        </span>
+                        <!-- Quick waste-only indicator tag -->
+                        <span id="activeFilterPresetTag" class="text-[9px] bg-cyan-950 text-cyan-400 border border-cyan-800 px-2 py-0.5 rounded font-mono hidden sm:inline">
+                            All Objects
                         </span>
                     </div>
 
@@ -361,8 +374,96 @@
 
     </main>
 
+    <!-- OBJECT DETECTION & LABEL FILTER MODAL -->
+    <div id="filterModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-all">
+        <div class="bg-panelbg border border-gray-700/80 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden font-sans">
+            
+            <!-- MODAL HEADER -->
+            <div class="px-6 py-4 bg-cardbg border-b border-gray-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-inner">
+                        <i class="fa-solid fa-sliders text-base"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-sm font-bold text-white uppercase tracking-wider">
+                                Detection &amp; Label Filters
+                            </h3>
+                            <span id="modalActivePill" class="text-[10px] bg-cyan-900/60 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
+                                80 / 80 Active
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-gray-400">Toggle which objects YOLO11 will display on screen and route to sorting doors.</p>
+                    </div>
+                </div>
+                <button onclick="closeFilterModal()" class="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- PRESET TOOLBAR & SEARCH -->
+            <div class="px-6 py-3 bg-darkbg border-b border-gray-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <!-- Preset Buttons -->
+                <div class="flex items-center flex-wrap gap-1.5">
+                    <span class="text-gray-500 text-[11px] font-mono mr-1">PRESETS:</span>
+                    <button onclick="applyPreset('waste_only')" class="px-2.5 py-1 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-medium transition active:scale-95 flex items-center gap-1.5">
+                        <i class="fa-solid fa-recycle text-[10px]"></i> Waste Only (Recommended)
+                    </button>
+                    <button onclick="applyPreset('all')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 font-medium transition active:scale-95">
+                        All Objects (80)
+                    </button>
+                    <button onclick="applyPreset('hazard_only')" class="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-500/40 text-red-300 font-medium transition active:scale-95">
+                        Hazard Only
+                    </button>
+                    <button onclick="applyPreset('clear')" class="px-2.5 py-1 rounded-lg bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-gray-200 font-medium transition active:scale-95">
+                        Clear All
+                    </button>
+                </div>
+
+                <!-- Search Input -->
+                <div class="relative min-w-[220px]">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-500 text-xs"></i>
+                    <input type="text" id="filterSearchInput" oninput="onFilterSearch(this.value)" placeholder="Search objects (e.g. bottle, laptop)..."
+                        class="w-full bg-cardbg text-gray-200 border border-gray-700 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-cyan-400 font-mono transition">
+                </div>
+            </div>
+
+            <!-- CATEGORY CHIP FILTERS -->
+            <div class="px-6 py-2 bg-panelbg border-b border-gray-800 flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                <span class="text-gray-500">FILTER CATEGORY:</span>
+                <button onclick="filterByCategory('ALL')" id="catBtn-ALL" class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold transition">All</button>
+                <button onclick="filterByCategory('HAZARD')" id="catBtn-HAZARD" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-red-400 border border-gray-700 hover:border-red-500/40 transition">🔴 Hazard</button>
+                <button onclick="filterByCategory('E-WASTE')" id="catBtn-E-WASTE" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-cyan-400 border border-gray-700 hover:border-cyan-500/40 transition">🟣 E-Waste</button>
+                <button onclick="filterByCategory('PAPER')" id="catBtn-PAPER" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-yellow-400 border border-gray-700 hover:border-yellow-500/40 transition">🟡 Paper</button>
+                <button onclick="filterByCategory('RECYCLABLE')" id="catBtn-RECYCLABLE" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-emerald-400 border border-gray-700 hover:border-emerald-500/40 transition">🟢 Recyclable</button>
+                <button onclick="filterByCategory('ORGANIC')" id="catBtn-ORGANIC" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-orange-400 border border-gray-700 hover:border-orange-500/40 transition">🟠 Organic</button>
+                <button onclick="filterByCategory('NON-WASTE')" id="catBtn-NON-WASTE" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-500 transition">⚪ Non-Waste</button>
+            </div>
+
+            <!-- OBJECT CHIPS GRID -->
+            <div class="p-6 overflow-y-auto max-h-[460px] grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs font-mono" id="objectChipsGrid">
+                <!-- Dynamically populated via loadFilterCatalog -->
+            </div>
+
+            <!-- MODAL FOOTER -->
+            <div class="px-6 py-3.5 bg-cardbg border-t border-gray-800 flex items-center justify-between">
+                <span class="text-xs text-gray-400 font-mono" id="modalStatusText">
+                    80 objects configured
+                </span>
+                <button onclick="closeFilterModal()" class="px-5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-darkbg font-bold text-xs transition shadow-lg shadow-cyan-900/30">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- JAVASCRIPT POLLING & INTERACTION -->
     <script>
+        // Global Filter State Cache
+        let filterCatalog = [];
+        let currentCategoryFilter = 'ALL';
+        let currentSearchTerm = '';
+
         async function updateState() {
             try {
                 const res = await fetch('/api/state');
@@ -461,7 +562,8 @@
                 'E-WASTE': { color: 'text-cyan-400', border: 'border-cyan-500/50', icon: 'fa-microchip', bg: 'bg-cyan-950/30' },
                 'PAPER': { color: 'text-yellow-400', border: 'border-yellow-500/50', icon: 'fa-box-archive', bg: 'bg-yellow-950/30' },
                 'RECYCLABLE': { color: 'text-emerald-400', border: 'border-emerald-500/50', icon: 'fa-bottle-water', bg: 'bg-emerald-950/30' },
-                'ORGANIC': { color: 'text-orange-400', border: 'border-orange-500/50', icon: 'fa-apple-whole', bg: 'bg-orange-950/30' }
+                'ORGANIC': { color: 'text-orange-400', border: 'border-orange-500/50', icon: 'fa-apple-whole', bg: 'bg-orange-950/30' },
+                'NON-WASTE': { color: 'text-gray-400', border: 'border-gray-700', icon: 'fa-ban', bg: 'bg-gray-900/40' }
             };
 
             let html = '';
@@ -471,6 +573,10 @@
                 const sourceBadge = item.source === 'MANUAL TRIGGER'
                     ? '<span class="text-[9px] bg-purple-900/60 text-purple-300 border border-purple-500/30 px-1 py-0.2 rounded font-mono">TEST</span>'
                     : '<span class="text-[9px] bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 rounded font-mono">CAM</span>';
+
+                const doorTag = item.door_id > 0
+                    ? `DOOR ${item.door_id}: ${item.category}`
+                    : `${item.category}`;
 
                 html += `
                 <div class="${style.bg} border ${style.border} rounded-xl p-2.5 flex items-center justify-between shadow-sm transition hover:border-gray-500">
@@ -484,7 +590,7 @@
                                 ${sourceBadge}
                             </div>
                             <div class="text-[10px] ${style.color} font-medium">
-                                DOOR ${item.door_id}: ${item.category}
+                                ${doorTag}
                             </div>
                         </div>
                     </div>
@@ -570,7 +676,155 @@
             updateState();
         }
 
-        // Poll every 250ms
+        // -------------------------------------------------------------
+        // OBJECT FILTER MODAL & DYNAMIC TOGGLING LOGIC
+        // -------------------------------------------------------------
+        async function loadFilterCatalog() {
+            try {
+                const res = await fetch('/api/object_filters');
+                const data = await res.json();
+                filterCatalog = data.catalog || [];
+                updateFilterBadges(data.enabled_count, data.total_count);
+                renderObjectChips();
+            } catch (err) {
+                console.error('Error loading filter catalog:', err);
+            }
+        }
+
+        function openFilterModal() {
+            document.getElementById('filterModal').classList.remove('hidden');
+            loadFilterCatalog();
+        }
+
+        function closeFilterModal() {
+            document.getElementById('filterModal').classList.add('hidden');
+        }
+
+        function onFilterSearch(val) {
+            currentSearchTerm = (val || '').toLowerCase().trim();
+            renderObjectChips();
+        }
+
+        function filterByCategory(cat) {
+            currentCategoryFilter = cat;
+            const cats = ['ALL', 'HAZARD', 'E-WASTE', 'PAPER', 'RECYCLABLE', 'ORGANIC', 'NON-WASTE'];
+            cats.forEach(c => {
+                const btn = document.getElementById(`catBtn-${c}`);
+                if (btn) {
+                    if (c === cat) {
+                        btn.className = 'px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold transition';
+                    } else {
+                        btn.className = 'px-2.5 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-500 transition';
+                    }
+                }
+            });
+            renderObjectChips();
+        }
+
+        function renderObjectChips() {
+            const grid = document.getElementById('objectChipsGrid');
+            if (!grid) return;
+
+            const categoryColors = {
+                'HAZARD': { border: 'border-red-500/40', badge: 'bg-red-950/80 text-red-300 border-red-500/30' },
+                'E-WASTE': { border: 'border-cyan-500/40', badge: 'bg-cyan-950/80 text-cyan-300 border-cyan-500/30' },
+                'PAPER': { border: 'border-yellow-500/40', badge: 'bg-yellow-950/80 text-yellow-300 border-yellow-500/30' },
+                'RECYCLABLE': { border: 'border-emerald-500/40', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/30' },
+                'ORGANIC': { border: 'border-orange-500/40', badge: 'bg-orange-950/80 text-orange-300 border-orange-500/30' },
+                'NON-WASTE': { border: 'border-gray-700', badge: 'bg-gray-800 text-gray-400 border-gray-600' }
+            };
+
+            let filtered = filterCatalog.filter(item => {
+                const matchCat = (currentCategoryFilter === 'ALL') || (item.category === currentCategoryFilter);
+                const matchSearch = !currentSearchTerm || item.name.toLowerCase().includes(currentSearchTerm);
+                return matchCat && matchSearch;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div class="col-span-full py-12 text-center text-gray-500 font-mono">No matching objects found.</div>';
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(item => {
+                const cStyle = categoryColors[item.category] || categoryColors['NON-WASTE'];
+                const isChecked = item.is_enabled;
+                const cardBg = isChecked ? 'bg-cardbg/90' : 'bg-gray-900/40 opacity-55';
+                const tagLabel = item.door_id ? `Door ${item.door_id}` : 'Other';
+
+                html += `
+                <div onclick="toggleSingleClass('${item.name}')"
+                    class="${cardBg} border ${isChecked ? cStyle.border : 'border-gray-800'} hover:border-cyan-400/80 rounded-xl p-2.5 flex items-center justify-between cursor-pointer transition select-none shadow-sm">
+                    <div class="truncate mr-2">
+                        <div class="font-bold text-gray-200 capitalize truncate text-xs">
+                            ${item.name}
+                        </div>
+                        <div class="text-[9px] text-gray-400 truncate mt-0.5 flex items-center gap-1">
+                            <span class="px-1.5 py-0.2 rounded font-mono text-[8px] border ${cStyle.badge}">
+                                ${tagLabel}
+                            </span>
+                            <span class="truncate">${item.category}</span>
+                        </div>
+                    </div>
+                    <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSingleClass('${item.name}')"
+                        class="w-4 h-4 rounded text-cyan-500 bg-gray-800 border-gray-700 focus:ring-0 cursor-pointer flex-shrink-0">
+                </div>
+                `;
+            });
+            grid.innerHTML = html;
+        }
+
+        async function toggleSingleClass(className) {
+            const item = filterCatalog.find(c => c.name.toLowerCase() === className.toLowerCase());
+            if (!item) return;
+
+            item.is_enabled = !item.is_enabled;
+            const enabledClasses = filterCatalog.filter(c => c.is_enabled).map(c => c.name.toLowerCase());
+
+            // Save to backend
+            try {
+                const res = await fetch('/api/object_filters', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled_classes: enabledClasses })
+                });
+                const data = await res.json();
+                updateFilterBadges(data.enabled_count, data.total_count);
+                renderObjectChips();
+            } catch (err) {
+                console.error('Error updating filter:', err);
+            }
+        }
+
+        async function applyPreset(preset) {
+            try {
+                const res = await fetch(`/api/filter_preset/${preset}`);
+                const data = await res.json();
+                // Update preset indicator tag
+                const tag = document.getElementById('activeFilterPresetTag');
+                if (tag) {
+                    if (preset === 'waste_only') tag.innerText = 'Waste Only';
+                    else if (preset === 'hazard_only') tag.innerText = 'Hazard Only';
+                    else if (preset === 'clear') tag.innerText = 'All Paused';
+                    else tag.innerText = 'All Objects';
+                }
+                loadFilterCatalog();
+            } catch (err) {
+                console.error('Error applying preset:', err);
+            }
+        }
+
+        function updateFilterBadges(enabledCount, totalCount) {
+            const badge = document.getElementById('filterCountBadge');
+            if (badge) badge.innerText = `${enabledCount}`;
+            const modalBadge = document.getElementById('modalActivePill');
+            if (modalBadge) modalBadge.innerText = `${enabledCount} / ${totalCount} Active`;
+            const statusText = document.getElementById('modalStatusText');
+            if (statusText) statusText.innerText = `${enabledCount} of ${totalCount} objects active for detection & labeling`;
+        }
+
+        // Initial setup
+        loadFilterCatalog();
         setInterval(updateState, 250);
         updateState();
     </script>
