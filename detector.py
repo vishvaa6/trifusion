@@ -6,14 +6,17 @@ Wraps Ultralytics YOLOv8 with FP16 CUDA acceleration for RTX 3050,
 
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 import cv2
 import numpy as np
 
 from config import (
+    AUTO_ROLLBACK_ON_ERROR,
     CONFIDENCE_THRESHOLD,
     DOORS,
+    FALLBACK_DEVICE,
     MODEL_NAME,
+    PREFER_GPU,
     TRANSPARENT_CLASSES,
     TRANSPARENT_CONFIDENCE_THRESHOLD,
     USE_HALF_PRECISION,
@@ -355,7 +358,7 @@ def enhance_transparent_clarity(img: np.ndarray) -> np.ndarray:
 
 
 class WasteDetector:
-    """YOLOv8 Edge Inference Engine with GPU optimization and waste stream routing."""
+    """YOLO11 Edge Inference Engine with GPU acceleration and safe zero-drop CPU rollback."""
 
     def __init__(
         self,
@@ -367,46 +370,179 @@ class WasteDetector:
         self.conf_threshold = conf_threshold
         self.transparent_conf_threshold = transparent_conf_threshold
         self.transparent_classes = set(TRANSPARENT_CLASSES)
+        
+        # Hardware execution and fail-safe state
         self.device = "cpu"
+        self.active_device = "cpu"
+        self.device_mode = "CPU"
+        self.gpu_name = "None"
+        self.gpu_available = False
         self.use_half = False
+        self.rollback_triggered = False
+        self.rollback_reason: Optional[str] = None
+        self.rollback_count = 0
+        
         self.model = None
         self.is_ready = False
         self.enabled_classes: Optional[Set[str]] = None  # None means all 80 classes enabled
 
         self._initialize_model()
 
-    def _initialize_model(self) -> None:
-        """Load YOLOv8 model, select CUDA/CPU device, and perform warmup."""
+    def rollback_to_cpu(self, reason: str) -> None:
+        """
+        Safely and dynamically roll back inference from GPU to CPU.
+        Frees VRAM, sets fallback flags, and migrates or reloads the model on CPU.
+        """
+        self.device = FALLBACK_DEVICE
+        self.active_device = FALLBACK_DEVICE
+        self.device_mode = "CPU"
+        self.use_half = False
+        self.rollback_triggered = True
+        self.rollback_reason = str(reason)
+        self.rollback_count += 1
+
+        print(f"[Detector] ⚠️ SAFE ROLLBACK ENGAGED: Diverting compute to CPU. Reason: {reason}")
+
+        # Safely release allocated PyTorch VRAM
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+        # Attempt to shift model in-memory or reload on CPU
+        try:
+            if self.model is not None:
+                if hasattr(self.model, "to"):
+                    self.model.to("cpu")
+        except Exception as e:
+            print(f"[Detector] Model transfer to CPU warning: {e}. Reinitializing on CPU...")
+            try:
+                from ultralytics import YOLO
+                self.model = YOLO(self.model_path)
+            except Exception as re_err:
+                print(f"[Detector] CPU reload error: {re_err}")
+
+    def retry_gpu(self) -> Tuple[bool, str]:
+        """
+        Operator action to attempt re-engaging the GPU after a rollback or resource recovery.
+        """
         try:
             import torch
             from ultralytics import YOLO
 
-            # Check CUDA capability
-            if torch.cuda.is_available():
+            if not torch.cuda.is_available():
+                msg = "CUDA is not available in current PyTorch build (CPU-only distribution)."
+                print(f"[Detector] {msg}")
+                return False, msg
+
+            gpu_name = torch.cuda.get_device_name(0)
+            print(f"[Detector] Attempting GPU re-engagement on {gpu_name}...")
+
+            test_device = "cuda:0"
+            dummy_img = np.zeros((480, 640, 3), dtype=np.uint8)
+            
+            # Reload fresh YOLO instance on CUDA
+            new_model = YOLO(self.model_path)
+            warmup_kwargs = {"conf": self.conf_threshold, "device": test_device, "verbose": False}
+            if USE_HALF_PRECISION:
+                warmup_kwargs["half"] = True
+
+            _ = new_model(dummy_img, **warmup_kwargs)
+
+            # Successfully validated on GPU
+            self.model = new_model
+            self.device = test_device
+            self.active_device = test_device
+            self.device_mode = "GPU"
+            self.gpu_name = gpu_name
+            self.gpu_available = True
+            self.use_half = USE_HALF_PRECISION
+            self.rollback_triggered = False
+            self.rollback_reason = None
+            self.is_ready = True
+
+            msg = f"GPU {gpu_name} successfully re-engaged with FP16={self.use_half}."
+            print(f"[Detector] {msg}")
+            return True, msg
+
+        except Exception as e:
+            err_msg = f"GPU re-engagement failed: {e}"
+            self.rollback_to_cpu(err_msg)
+            return False, err_msg
+
+    def get_device_telemetry(self) -> Dict[str, Any]:
+        """Returns real-time compute hardware and safe rollback diagnostics."""
+        return {
+            "device": self.device,
+            "active_device": self.active_device,
+            "device_mode": self.device_mode,
+            "gpu_name": self.gpu_name,
+            "gpu_available": self.gpu_available,
+            "use_half": self.use_half,
+            "rollback_triggered": self.rollback_triggered,
+            "rollback_reason": self.rollback_reason,
+            "rollback_count": self.rollback_count,
+            "vram_mb": round(self.get_vram_usage_mb(), 1)
+        }
+
+    def _initialize_model(self) -> None:
+        """Load YOLO11 model with automatic GPU selection and fallback to CPU."""
+        try:
+            import torch
+            from ultralytics import YOLO
+
+            # 1. Determine compute device
+            cuda_avail = torch.cuda.is_available()
+            if PREFER_GPU and cuda_avail:
                 self.device = "cuda:0"
-                gpu_name = torch.cuda.get_device_name(0)
-                print(f"[Detector] GPU Detected: {gpu_name} (CUDA Active)")
+                self.active_device = "cuda:0"
+                self.device_mode = "GPU"
+                self.gpu_available = True
+                self.gpu_name = torch.cuda.get_device_name(0)
                 self.use_half = USE_HALF_PRECISION
+                print(f"[Detector] GPU Hardware Detected: {self.gpu_name} (CUDA Active)")
             else:
                 self.device = "cpu"
-                print("[Detector] CUDA not available. Running on CPU.")
+                self.active_device = "cpu"
+                self.device_mode = "CPU"
+                self.gpu_available = False
                 self.use_half = False
+                if not cuda_avail:
+                    self.rollback_reason = "PyTorch CUDA build not active in environment (native CPU)"
+                    print("[Detector] CUDA not available in PyTorch build. Running on CPU.")
+                else:
+                    self.rollback_reason = "GPU disabled by configuration (PREFER_GPU=False)"
 
+            # 2. Attempt model loading
             print(f"[Detector] Loading model '{self.model_path}' on {self.device}...")
             self.model = YOLO(self.model_path)
 
-            # Warmup pass to pre-compile CUDA kernels and allocate VRAM
+            # 3. Perform hardware warmup
             dummy_img = np.zeros((480, 640, 3), dtype=np.uint8)
             warmup_kwargs = {"conf": self.conf_threshold, "device": self.device, "verbose": False}
             if self.use_half:
                 warmup_kwargs["half"] = True
-            _ = self.model(dummy_img, **warmup_kwargs)
-            print(f"[Detector] CUDA Warmup complete. FP16={self.use_half}. System Ready.")
-            self.is_ready = True
+
+            try:
+                _ = self.model(dummy_img, **warmup_kwargs)
+                print(f"[Detector] {self.device.upper()} Warmup complete. FP16={self.use_half}. System Ready.")
+                self.is_ready = True
+            except Exception as warmup_err:
+                if self.device != "cpu":
+                    print(f"[Detector] Warmup failed on GPU: {warmup_err}. Triggering safe rollback to CPU...")
+                    self.rollback_to_cpu(f"Warmup failure: {warmup_err}")
+                    # Re-warmup on CPU
+                    _ = self.model(dummy_img, conf=self.conf_threshold, device="cpu", verbose=False)
+                    print("[Detector] CPU Fallback Warmup complete. System Ready.")
+                    self.is_ready = True
+                else:
+                    raise warmup_err
 
         except Exception as e:
             print(f"[Detector] Warning during initialization: {e}")
-            print("[Detector] Will operate in simulation heuristic mode if YOLO is unavailable.")
+            self.rollback_to_cpu(f"Initialization failure: {e}")
             self.is_ready = False
 
     def get_vram_usage_mb(self) -> float:
@@ -680,15 +816,26 @@ class WasteDetector:
             # 2. Lower prediction threshold so YOLO NMS does not prematurely drop transparent objects
             inference_conf = min(self.conf_threshold, self.transparent_conf_threshold)
 
-            predict_kwargs = {
-                "conf": inference_conf,
-                "device": self.device,
-                "verbose": False
-            }
-            if self.use_half:
-                predict_kwargs["half"] = True
-
-            results = self.model(enhanced_frame, **predict_kwargs)
+            # 3. Dynamic Safe Inference (GPU with automatic zero-drop CPU retry)
+            results = None
+            if self.device != "cpu":
+                try:
+                    predict_kwargs = {
+                        "conf": inference_conf,
+                        "device": self.device,
+                        "verbose": False
+                    }
+                    if self.use_half:
+                        predict_kwargs["half"] = True
+                    results = self.model(enhanced_frame, **predict_kwargs)
+                except Exception as gpu_runtime_err:
+                    # Catch CUDA OOM, driver crashes, or kernel errors
+                    print(f"[Detector] ⚠️ GPU Runtime Exception: {gpu_runtime_err}. Engaging safe zero-drop rollback to CPU...")
+                    self.rollback_to_cpu(f"GPU Runtime Exception: {gpu_runtime_err}")
+                    # Zero-drop retry on CPU for this exact frame
+                    results = self.model(enhanced_frame, conf=inference_conf, device="cpu", verbose=False)
+            else:
+                results = self.model(enhanced_frame, conf=inference_conf, device="cpu", verbose=False)
 
             for r in results:
                 boxes = r.boxes

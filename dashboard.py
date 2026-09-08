@@ -411,8 +411,20 @@ def api_state():
             "total_objects_count": 80,
             "error_matrix_accuracy": error_matrix_tracker.get_summary()["overall_accuracy_pct"],
             "error_matrix_mse": error_matrix_tracker.get_summary()["overall_mse"],
-            "error_matrix_total": error_matrix_tracker.get_summary()["total_evaluations"]
+            "error_matrix_total": error_matrix_tracker.get_summary()["total_evaluations"],
+            "device_telemetry": detector.get_device_telemetry()
         })
+
+
+@app.route('/api/device/retry_gpu', methods=['POST'])
+def api_device_retry_gpu():
+    """Attempt to re-engage GPU execution after rollback."""
+    success, message = detector.retry_gpu()
+    return jsonify({
+        "success": success,
+        "message": message,
+        "device_telemetry": detector.get_device_telemetry()
+    })
 
 
 @app.route('/api/cameras')

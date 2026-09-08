@@ -18,14 +18,18 @@ CANVAS_WIDTH: int = 1100
 CANVAS_HEIGHT: int = 650
 TARGET_FPS: int = 60
 
-# Model Settings
+# Model & Hardware Compute Settings
 MODEL_NAME: str = "yolo11n.pt"  # Latest Ultralytics YOLO11 Nano model
+PREFER_GPU: bool = True  # Prioritize NVIDIA CUDA execution
+FALLBACK_DEVICE: str = "cpu"  # Safe rollback target
+AUTO_ROLLBACK_ON_ERROR: bool = True  # Automatically fallback to CPU if GPU errors or OOM occur
+MAX_GPU_RETRIES: int = 3  # Maximum automatic reconnection attempts per session
 CONFIDENCE_THRESHOLD: float = 0.40
 TRANSPARENT_CONFIDENCE_THRESHOLD: float = 0.20  # Heightened sensitivity floor for transparent glass & PET plastic
 TRANSPARENT_CLASSES: Set[str] = {
     "bottle", "wine glass", "cup", "bowl", "vase", "tie"
 }
-USE_HALF_PRECISION: bool = True  # FP16 inference for RTX 3050 Tensor Cores
+USE_HALF_PRECISION: bool = True  # FP16 Tensor Core acceleration on GPU
 
 # 5-Door Waste Routing Taxonomy
 # Maps COCO-80 classes and waste items to specific doors

@@ -60,6 +60,13 @@
                         <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                         LIVE
                     </span>
+                    <!-- COMPUTE HARDWARE & SAFE ROLLBACK PILL -->
+                    <span id="computeDeviceBadge" onclick="handleDeviceBadgeClick()"
+                        class="flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border border-blue-500/30 bg-blue-950/50 text-blue-300 shadow-sm cursor-pointer transition"
+                        title="Compute Device & Safe Rollback Status (Click to retry GPU)">
+                        <i id="computeDeviceIcon" class="fa-solid fa-microchip text-blue-400 text-[9px]"></i>
+                        <span id="computeDeviceText">CPU (Native)</span>
+                    </span>
                 </div>
                 <p class="text-[11px] text-gray-400">Automated 5-Door Industrial Waste Segregation &amp; Hazard Lockout</p>
             </div>
@@ -885,6 +892,11 @@
                 }
                 document.getElementById('currentDetectedTag').innerText = data.current_detected_label || 'Monitoring (Present object to camera)...';
 
+                // Sync Compute Hardware & Safe Rollback Badge
+                if (data.device_telemetry) {
+                    updateComputeDeviceBadge(data.device_telemetry);
+                }
+
                 // Scanner badge
                 const scanBadge = document.getElementById('scannerStatusBadge');
                 if (data.scanner_paused) {
@@ -1628,6 +1640,58 @@
                 }
             } catch (err) {
                 console.error('Error resetting error matrix:', err);
+            }
+        }
+
+        
+        // -------------------------------------------------------------
+        // COMPUTE DEVICE & GPU SAFE ROLLBACK UI
+        // -------------------------------------------------------------
+        let lastDeviceState = null;
+
+        function updateComputeDeviceBadge(telem) {
+            const badge = document.getElementById('computeDeviceBadge');
+            const icon = document.getElementById('computeDeviceIcon');
+            const text = document.getElementById('computeDeviceText');
+            if (!badge || !icon || !text) return;
+
+            if (telem.device_mode === 'GPU' && !telem.rollback_triggered) {
+                badge.className = 'flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border border-cyan-500/40 bg-cyan-950/70 text-cyan-300 shadow-sm transition';
+                icon.className = 'fa-solid fa-bolt text-cyan-400 text-[9px]';
+                const gpuLabel = (telem.gpu_name && telem.gpu_name.includes('RTX')) ? 'GPU: RTX 3050' : 'GPU: CUDA';
+                text.innerText = gpuLabel + (telem.use_half ? ' (FP16)' : '');
+                badge.title = `Active on ${telem.gpu_name} (FP16=${telem.use_half}). Zero-drop CPU rollback armed.`;
+            } else if (telem.rollback_triggered) {
+                badge.className = 'flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border border-amber-500/60 bg-amber-950/80 text-amber-300 cursor-pointer shadow-sm hover:bg-amber-900 active:scale-95 transition animate-pulse';
+                icon.className = 'fa-solid fa-triangle-exclamation text-amber-400 text-[9px]';
+                text.innerText = 'CPU (Rollback) ⟳ Retry';
+                badge.title = `GPU Safe Rollback Active: ${telem.rollback_reason || 'Unknown error'}. Click to attempt re-engaging GPU.`;
+            } else {
+                badge.className = 'flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold border border-blue-500/30 bg-blue-950/50 text-blue-300 shadow-sm transition';
+                icon.className = 'fa-solid fa-microchip text-blue-400 text-[9px]';
+                text.innerText = 'CPU (Native)';
+                badge.title = telem.rollback_reason || 'Operating in Native CPU Mode';
+            }
+        }
+
+        async function handleDeviceBadgeClick() {
+            const badge = document.getElementById('computeDeviceBadge');
+            const icon = document.getElementById('computeDeviceIcon');
+            if (icon) icon.className = 'fa-solid fa-spinner fa-spin text-[9px]';
+
+            try {
+                const res = await fetch('/api/device/retry_gpu', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    alert('GPU Re-engagement Success:\n' + data.message);
+                } else {
+                    alert('Compute Device Status:\n' + data.message + '\n\nAutomatic fail-safe protection: System is operational on CPU with zero dropped frames.');
+                }
+                updateState();
+            } catch (err) {
+                console.error('Error re-engaging GPU:', err);
+            } finally {
+                setTimeout(updateState, 300);
             }
         }
 

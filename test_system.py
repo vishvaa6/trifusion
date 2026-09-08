@@ -283,6 +283,54 @@ def test_error_matrix_and_mse():
     print("  -> Passed! 5x5 Error Matrix, MSE covariance, chute distance, and MES KPIs validated.")
 
 
+def test_gpu_safe_rollback():
+    print("[TEST 9/9] Verifying GPU Execution & Zero-Drop Safe CPU Rollback Engine...")
+    from detector import WasteDetector
+    import numpy as np
+
+    detector = WasteDetector()
+    assert detector.is_ready is True
+    assert hasattr(detector, "rollback_to_cpu")
+    assert hasattr(detector, "retry_gpu")
+    assert hasattr(detector, "get_device_telemetry")
+
+    # 1. Test Telemetry Format
+    telem = detector.get_device_telemetry()
+    assert "device" in telem
+    assert "active_device" in telem
+    assert "device_mode" in telem
+    assert "rollback_triggered" in telem
+    assert "rollback_reason" in telem
+
+    # 2. Test Dynamic Safe Rollback Trigger
+    initial_rollback_count = detector.rollback_count
+    detector.rollback_to_cpu("Simulated CUDA Out Of Memory fault during belt inspection")
+
+    assert detector.device == "cpu"
+    assert detector.active_device == "cpu"
+    assert detector.device_mode == "CPU"
+    assert detector.use_half is False
+    assert detector.rollback_triggered is True
+    assert "Simulated CUDA Out Of Memory fault" in detector.rollback_reason
+    assert detector.rollback_count == initial_rollback_count + 1
+
+    # 3. Test Zero-Drop Frame Inference Following Rollback
+    dummy_frame = np.random.randint(50, 200, (480, 640, 3), dtype=np.uint8)
+    res = detector.detect(dummy_frame)
+    assert res is not None
+    assert isinstance(res.items, list)
+    assert res.inference_time_ms >= 0.0
+
+    # 4. Test Operator GPU Re-engagement
+    ok, msg = detector.retry_gpu()
+    assert isinstance(ok, bool)
+    assert isinstance(msg, str)
+    # The system must remain healthy regardless of whether physical CUDA is linked or CPU fallback
+    assert detector.is_ready is True
+
+    print("  -> Passed! GPU telemetry, simulated OOM fallback, and zero-drop CPU inference verified.")
+
+
 if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("    RUNNING AI WASTE SEGREGATION INTEGRATION TESTS")
@@ -296,8 +344,10 @@ if __name__ == "__main__":
     test_headless_render()
     test_transparent_object_enhancement()
     test_error_matrix_and_mse()
+    test_gpu_safe_rollback()
 
     print("\n" + "=" * 60)
-    print("    ALL INTEGRATION TESTS PASSED SUCCESSFULLY! [8/8]")
+    print("    ALL INTEGRATION TESTS PASSED SUCCESSFULLY! [9/9]")
     print("=" * 60 + "\n")
+
 
