@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# PyTorch / YOLO Model Weights (Ultralytics auto-downloads yolov8n.pt if missing)
+*.pt
+*.onnx
+*.engine
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary images and artifacts
+*.jpg
+*.jpeg
+*.png
+!templates/*.png
+!static/*.png
+
+# Runtime session logs
+session_report.txt
+hazard_log.csv

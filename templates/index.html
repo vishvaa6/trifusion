@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Waste Segregation - Real-Time Camera & 5-Door SCADA Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0c0e12',
+                        panelbg: '#14171f',
+                        cardbg: '#1b1f2b',
+                        hazard: '#ef4444',
+                        ewaste: '#06b6d4',
+                        paper: '#eab308',
+                        recyclable: '#22c55e',
+                        organic: '#f97316'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes strobePulse {
+            0%, 100% { border-color: #ef4444; background-color: rgba(239, 68, 68, 0.25); }
+            50% { border-color: #ffffff; background-color: rgba(239, 68, 68, 0.65); }
+        }
+        .hazard-active {
+            animation: strobePulse 0.5s infinite;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #14171f; }
+        ::-webkit-scrollbar-thumb { background: #2f3545; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #454e66; }
+    </style>
+</head>
+<body class="bg-darkbg text-gray-100 font-sans min-h-screen flex flex-col">
+
+    <!-- TOP TELEMETRY NAVBAR -->
+    <header class="bg-panelbg border-b border-gray-800 px-6 py-3 flex flex-wrap items-center justify-between shadow-2xl">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-emerald-900/40">
+                <i class="fa-solid fa-recycle"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wide text-gray-100 flex items-center gap-2">
+                    AI WASTE SEGREGATION &bull; 5-DOOR ROUTING SYSTEM
+                    <span class="text-[11px] bg-emerald-900/60 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded font-mono font-bold">REALTIME EDGE SCADA</span>
+                </h1>
+                <p class="text-xs text-gray-400">Ultralytics YOLOv8 &bull; Real-time Camera AI Vision &bull; 5 Automated Sorting Doors &bull; Hazard Intercept Protocol</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3 mt-2 sm:mt-0 font-mono text-sm">
+            <div class="bg-cardbg border border-gray-700/80 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-inner">
+                <span class="text-gray-400 text-xs">FPS</span>
+                <span id="fpsVal" class="text-emerald-400 font-bold">--</span>
+            </div>
+            <div class="bg-cardbg border border-gray-700/80 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-inner">
+                <span class="text-gray-400 text-xs">AI LATENCY</span>
+                <span id="infVal" class="text-amber-400 font-bold">-- ms</span>
+            </div>
+            <div class="bg-cardbg border border-gray-700/80 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-inner">
+                <span class="text-gray-400 text-xs">VRAM</span>
+                <span id="vramVal" class="text-cyan-400 font-bold">-- MB</span>
+            </div>
+            <div class="bg-cardbg border border-gray-700/80 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-inner">
+                <span class="text-gray-400 text-xs">UPTIME</span>
+                <span id="uptimeVal" class="text-gray-200 font-bold">00:00:00</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- HAZARD EMERGENCY INTERCEPT BANNER (Hidden by default) -->
+    <div id="hazardBanner" class="hidden bg-red-950 border-y-4 border-red-500 text-white px-6 py-3 text-center transition-all shadow-2xl">
+        <div class="flex items-center justify-center gap-3">
+            <i class="fa-solid fa-triangle-exclamation text-2xl text-yellow-300 animate-bounce"></i>
+            <span class="text-base sm:text-lg font-black tracking-widest uppercase text-red-100">
+                🚨 !!! HAZARD INTERCEPT ACTIVATED — DOOR 1 LOCKED — SAFETY PAUSE !!! 🚨
+            </span>
+            <span id="hazardDetail" class="text-sm bg-black/50 px-3 py-1 rounded font-mono border border-red-400 text-yellow-300 font-bold">
+                Item: KNIFE (94.2%)
+            </span>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="flex-1 p-6 grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+        <!-- LEFT 2 COLUMNS: CAMERA SCANNER + 5 SIMULATION DOORS -->
+        <div class="xl:col-span-2 flex flex-col space-y-6">
+
+            <!-- REALTIME WEBCAM SCANNER SCREEN (FULL-WIDTH PRESENTATION) -->
+            <div class="bg-panelbg border border-gray-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+                <div class="bg-cardbg px-5 py-3 border-b border-gray-800 flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2.5 text-xs font-bold text-gray-200 uppercase tracking-wide">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400"></span>
+                        <i class="fa-solid fa-camera text-emerald-400 text-sm"></i>
+                        <span>Live Camera AI Object Scanner</span>
+                    </div>
+
+                    <!-- CAMERA SOURCE DROPDOWN & RESCAN -->
+                    <div class="flex items-center gap-2">
+                        <label for="cameraSelectDropdown" class="text-[11px] text-gray-400 font-mono flex items-center gap-1.5">
+                            <i class="fa-solid fa-camera-rotate text-cyan-400"></i> CAMERA SOURCE:
+                        </label>
+                        <div class="flex items-center gap-1.5">
+                            <select id="cameraSelectDropdown" onchange="onCameraDropdownChange(this.value)"
+                                class="bg-gray-900 text-gray-100 border border-gray-600 hover:border-cyan-400 focus:border-cyan-400 text-xs rounded-lg px-3 py-1.5 font-mono cursor-pointer focus:outline-none transition shadow-sm">
+                                <option value="1">Camo (Phone HD 720p)</option>
+                                <option value="0">HD Webcam (Laptop Integrated)</option>
+                                <option value="2">OBS Virtual Camera (Virtual Stream)</option>
+                            </select>
+                            <button onclick="rescanCameras()" title="Rescan connected cameras on this device"
+                                class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 active:scale-95 text-cyan-400 hover:text-cyan-300 border border-gray-700 hover:border-cyan-500 rounded-lg text-xs transition flex items-center gap-1 font-mono shadow-sm">
+                                <i class="fa-solid fa-arrows-rotate" id="rescanIcon"></i>
+                                <span class="hidden sm:inline text-[11px]">Rescan</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CAMERA STREAM DISPLAY -->
+                <div class="relative bg-black aspect-[16/9] flex items-center justify-center overflow-hidden">
+                    <img id="camStreamImg" src="/video_cam" onerror="setTimeout(reloadStream, 1500)" alt="Live Camera AI Feed" class="w-full h-full object-contain">
+
+                    <!-- Overlay Target Banner at Bottom -->
+                    <div class="absolute bottom-3 left-4 right-4 bg-black/80 backdrop-blur-md border border-gray-700/90 rounded-xl px-4 py-2 flex items-center justify-between text-xs font-mono shadow-2xl">
+                        <div class="flex items-center gap-2.5 text-gray-200">
+                            <i class="fa-solid fa-crosshairs text-cyan-400 animate-spin text-sm"></i>
+                            <span class="text-gray-400 text-[11px]">ACTIVE DETECTION:</span>
+                            <span id="currentDetectedTag" class="text-cyan-300 font-bold truncate max-w-[360px]">Monitoring (Present object to camera)...</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="reloadStream()" title="Reload live camera stream" class="text-[10px] bg-gray-800 hover:bg-gray-700 text-cyan-400 border border-gray-600 px-2 py-0.5 rounded font-mono flex items-center gap-1 transition">
+                                <i class="fa-solid fa-arrows-rotate text-[9px]"></i>
+                                <span>Reload Stream</span>
+                            </button>
+                            <span id="scannerStatusBadge" class="text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-mono font-bold">SCANNER ACTIVE</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- THE 5 SIMULATION DOORS MONITOR (PROMINENT CARDS) -->
+            <div class="bg-panelbg border border-gray-800 rounded-2xl p-5 shadow-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-bold text-gray-100 flex items-center gap-2 uppercase tracking-wide">
+                        <i class="fa-solid fa-door-open text-emerald-400"></i>
+                        5-Door Automated Sorting Chutes
+                    </h2>
+                    <span class="text-xs text-gray-400 font-mono">Pneumatic Sorting Gates</span>
+                </div>
+
+                <!-- 5 DOORS GRID -->
+                <div class="grid grid-cols-1 sm:grid-cols-5 gap-3.5" id="doorsGrid">
+                    <!-- DOOR 1: HAZARD -->
+                    <div id="doorCard-1" class="bg-cardbg border border-gray-700/80 rounded-xl p-4 transition-all flex flex-col justify-between min-h-[140px]">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold font-mono text-gray-400">DOOR 1</span>
+                                <span id="doorBadge-1" class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                            </div>
+                            <div class="text-sm font-bold text-red-400 flex items-center gap-1.5 mb-1">
+                                <i class="fa-solid fa-biohazard"></i> HAZARD
+                            </div>
+                            <div class="text-[10px] text-gray-400 mb-2">Knife, Syringe, Bottle</div>
+                        </div>
+                        <div class="pt-2 border-t border-gray-800/80 text-xs">
+                            <div class="flex justify-between text-gray-400 font-mono mb-1">
+                                <span>Sorted:</span>
+                                <span id="doorCount-1" class="text-gray-100 font-bold text-sm">0</span>
+                            </div>
+                            <div class="text-[11px] text-gray-400 truncate">
+                                Last: <span id="doorLast-1" class="text-gray-200 font-mono">None</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DOOR 2: E-WASTE -->
+                    <div id="doorCard-2" class="bg-cardbg border border-gray-700/80 rounded-xl p-4 transition-all flex flex-col justify-between min-h-[140px]">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold font-mono text-gray-400">DOOR 2</span>
+                                <span id="doorBadge-2" class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                            </div>
+                            <div class="text-sm font-bold text-cyan-400 flex items-center gap-1.5 mb-1">
+                                <i class="fa-solid fa-microchip"></i> E-WASTE
+                            </div>
+                            <div class="text-[10px] text-gray-400 mb-2">Phone, Laptop, Keyboard</div>
+                        </div>
+                        <div class="pt-2 border-t border-gray-800/80 text-xs">
+                            <div class="flex justify-between text-gray-400 font-mono mb-1">
+                                <span>Sorted:</span>
+                                <span id="doorCount-2" class="text-gray-100 font-bold text-sm">0</span>
+                            </div>
+                            <div class="text-[11px] text-gray-400 truncate">
+                                Last: <span id="doorLast-2" class="text-gray-200 font-mono">None</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DOOR 3: PAPER -->
+                    <div id="doorCard-3" class="bg-cardbg border border-gray-700/80 rounded-xl p-4 transition-all flex flex-col justify-between min-h-[140px]">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold font-mono text-gray-400">DOOR 3</span>
+                                <span id="doorBadge-3" class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                            </div>
+                            <div class="text-sm font-bold text-yellow-400 flex items-center gap-1.5 mb-1">
+                                <i class="fa-solid fa-box-archive"></i> PAPER
+                            </div>
+                            <div class="text-[10px] text-gray-400 mb-2">Book, Cardboard, Paper</div>
+                        </div>
+                        <div class="pt-2 border-t border-gray-800/80 text-xs">
+                            <div class="flex justify-between text-gray-400 font-mono mb-1">
+                                <span>Sorted:</span>
+                                <span id="doorCount-3" class="text-gray-100 font-bold text-sm">0</span>
+                            </div>
+                            <div class="text-[11px] text-gray-400 truncate">
+                                Last: <span id="doorLast-3" class="text-gray-200 font-mono">None</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DOOR 4: RECYCLABLE -->
+                    <div id="doorCard-4" class="bg-cardbg border border-gray-700/80 rounded-xl p-4 transition-all flex flex-col justify-between min-h-[140px]">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold font-mono text-gray-400">DOOR 4</span>
+                                <span id="doorBadge-4" class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                            </div>
+                            <div class="text-sm font-bold text-emerald-400 flex items-center gap-1.5 mb-1">
+                                <i class="fa-solid fa-bottle-water"></i> RECYCLABLE
+                            </div>
+                            <div class="text-[10px] text-gray-400 mb-2">Cup, Can, Tableware</div>
+                        </div>
+                        <div class="pt-2 border-t border-gray-800/80 text-xs">
+                            <div class="flex justify-between text-gray-400 font-mono mb-1">
+                                <span>Sorted:</span>
+                                <span id="doorCount-4" class="text-gray-100 font-bold text-sm">0</span>
+                            </div>
+                            <div class="text-[11px] text-gray-400 truncate">
+                                Last: <span id="doorLast-4" class="text-gray-200 font-mono">None</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DOOR 5: ORGANIC -->
+                    <div id="doorCard-5" class="bg-cardbg border border-gray-700/80 rounded-xl p-4 transition-all flex flex-col justify-between min-h-[140px]">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold font-mono text-gray-400">DOOR 5</span>
+                                <span id="doorBadge-5" class="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
+                            </div>
+                            <div class="text-sm font-bold text-orange-400 flex items-center gap-1.5 mb-1">
+                                <i class="fa-solid fa-apple-whole"></i> ORGANIC
+                            </div>
+                            <div class="text-[10px] text-gray-400 mb-2">Food, Apple, Banana</div>
+                        </div>
+                        <div class="pt-2 border-t border-gray-800/80 text-xs">
+                            <div class="flex justify-between text-gray-400 font-mono mb-1">
+                                <span>Sorted:</span>
+                                <span id="doorCount-5" class="text-gray-100 font-bold text-sm">0</span>
+                            </div>
+                            <div class="text-[11px] text-gray-400 truncate">
+                                Last: <span id="doorLast-5" class="text-gray-200 font-mono">None</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: REAL-TIME CLASSIFIED FEED & OPERATIONAL CONTROLS -->
+        <div class="flex flex-col space-y-6">
+
+            <!-- QUICK MANUAL DOOR TRIGGER & CONTROLS -->
+            <div class="bg-panelbg border border-gray-800 rounded-2xl p-5 shadow-2xl">
+                <h2 class="text-sm font-bold text-gray-100 flex items-center gap-2 mb-3 uppercase tracking-wide">
+                    <i class="fa-solid fa-sliders text-cyan-400"></i>
+                    Manual Door Test &amp; Controls
+                </h2>
+
+                <p class="text-[11px] text-gray-400 mb-3">Click any door below to test pneumatic shutter opening:</p>
+
+                <!-- DOOR TEST BUTTONS -->
+                <div class="grid grid-cols-1 gap-1.5 mb-4">
+                    <button onclick="triggerDoor(1)" class="text-left px-3 py-2 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-500/50 text-xs font-semibold text-red-300 flex items-center justify-between transition">
+                        <span>🚪 Test Door 1 (Hazard Lock)</span>
+                        <i class="fa-solid fa-play text-[10px]"></i>
+                    </button>
+                    <button onclick="triggerDoor(2)" class="text-left px-3 py-2 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/50 text-xs font-semibold text-cyan-300 flex items-center justify-between transition">
+                        <span>🚪 Test Door 2 (E-Waste)</span>
+                        <i class="fa-solid fa-play text-[10px]"></i>
+                    </button>
+                    <button onclick="triggerDoor(3)" class="text-left px-3 py-2 rounded-lg bg-yellow-950/40 hover:bg-yellow-900/60 border border-yellow-500/50 text-xs font-semibold text-yellow-300 flex items-center justify-between transition">
+                        <span>🚪 Test Door 3 (Paper)</span>
+                        <i class="fa-solid fa-play text-[10px]"></i>
+                    </button>
+                    <button onclick="triggerDoor(4)" class="text-left px-3 py-2 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/50 text-xs font-semibold text-emerald-300 flex items-center justify-between transition">
+                        <span>🚪 Test Door 4 (Recyclable)</span>
+                        <i class="fa-solid fa-play text-[10px]"></i>
+                    </button>
+                    <button onclick="triggerDoor(5)" class="text-left px-3 py-2 rounded-lg bg-orange-950/40 hover:bg-orange-900/60 border border-orange-500/50 text-xs font-semibold text-orange-300 flex items-center justify-between transition">
+                        <span>🚪 Test Door 5 (Organic)</span>
+                        <i class="fa-solid fa-play text-[10px]"></i>
+                    </button>
+                </div>
+
+                <!-- SCANNER ACTIONS -->
+                <div class="grid grid-cols-2 gap-2 pt-3 border-t border-gray-800">
+                    <button onclick="togglePause()" id="btnPause" class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow">
+                        <i class="fa-solid fa-pause"></i> Pause AI
+                    </button>
+                    <button onclick="resetCounters()" class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow">
+                        <i class="fa-solid fa-rotate-right"></i> Reset Counts
+                    </button>
+                </div>
+            </div>
+
+            <!-- CLASSIFIED OBJECTS REAL-TIME FEED -->
+            <div class="bg-panelbg border border-gray-800 rounded-2xl p-5 shadow-2xl flex-1 flex flex-col min-h-[460px]">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold text-gray-100 flex items-center gap-2 uppercase tracking-wide">
+                        <i class="fa-solid fa-tags text-yellow-400"></i>
+                        Classified Objects Live Feed
+                    </h2>
+                    <span class="text-xs bg-gray-800 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-lg font-mono font-bold" id="totalSortedCount">
+                        Total: 0
+                    </span>
+                </div>
+
+                <p class="text-xs text-gray-400 mb-3">Present items to your camera (Camo / Webcam) to detect and route in real-time.</p>
+
+                <!-- SCROLLABLE CLASSIFIED FEED LIST -->
+                <div class="space-y-2 overflow-y-auto max-h-[460px] pr-1 flex-1 font-mono text-xs" id="classifiedItemsList">
+                    <div class="text-center py-16 text-gray-500 text-xs">
+                        <i class="fa-solid fa-camera-viewfinder text-3xl mb-2 text-gray-600"></i>
+                        <p>Waiting for items to be presented to camera...</p>
+                    </div>
+                </div>
+
+                <!-- AUDIT LOG EXPORT -->
+                <div class="pt-3 mt-3 border-t border-gray-800 flex justify-between items-center text-xs">
+                    <span class="text-gray-400">Audit Trail:</span>
+                    <a href="/api/download_log" class="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 transition">
+                        <i class="fa-solid fa-download"></i> Download hazard_log.csv
+                    </a>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- JAVASCRIPT POLLING & INTERACTION -->
+    <script>
+        // Poll state every 250ms
+        async function updateState() {
+            try {
+                const res = await fetch('/api/state');
+                const data = await res.json();
+
+                // Telemetry
+                document.getElementById('fpsVal').innerText = data.fps.toFixed(1);
+                document.getElementById('infVal').innerText = data.inference_ms.toFixed(1) + ' ms';
+                document.getElementById('vramVal').innerText = Math.round(data.vram_mb) + ' MB';
+                document.getElementById('uptimeVal').innerText = data.uptime;
+                document.getElementById('totalSortedCount').innerText = 'Total: ' + data.total_sorted;
+                document.getElementById('currentDetectedTag').innerText = data.current_detected_label || 'Scanning...';
+
+                // Scanner badge
+                const scanBadge = document.getElementById('scannerStatusBadge');
+                if (data.scanner_paused) {
+                    scanBadge.innerText = 'AI SCANNER PAUSED';
+                    scanBadge.className = 'text-[10px] bg-red-900/80 text-red-300 border border-red-500/50 px-2 py-0.5 rounded font-mono font-bold';
+                } else {
+                    scanBadge.innerText = 'SCANNER ACTIVE';
+                    scanBadge.className = 'text-[10px] bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-mono font-bold';
+                }
+
+                // Update Camera Dropdown
+                updateCameraDropdown(data.available_cameras, data.active_camera_id);
+
+                // Hazard Intercept Banner
+                const hazardBanner = document.getElementById('hazardBanner');
+                if (data.is_hazard_locked) {
+                    hazardBanner.classList.remove('hidden');
+                    document.getElementById('hazardDetail').innerText =
+                        'Item: ' + data.last_hazard_class.toUpperCase() + ' (' + (data.last_hazard_conf * 100).toFixed(1) + '%)';
+                } else {
+                    hazardBanner.classList.add('hidden');
+                }
+
+                // 5 Doors Update
+                for (let d = 1; d <= 5; d++) {
+                    const door = data.doors[d];
+                    if (!door) continue;
+
+                    const card = document.getElementById(`doorCard-${d}`);
+                    const badge = document.getElementById(`doorBadge-${d}`);
+                    const count = document.getElementById(`doorCount-${d}`);
+                    const last = document.getElementById(`doorLast-${d}`);
+
+                    count.innerText = door.count;
+                    last.innerText = door.last_item || 'None';
+
+                    if (door.is_hazard_locked) {
+                        badge.innerText = 'LOCKED';
+                        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-red-600 text-white font-mono animate-pulse';
+                        card.className = 'bg-cardbg border-2 border-red-500 rounded-xl p-4 transition-all hazard-active shadow-lg shadow-red-900/50 flex flex-col justify-between min-h-[140px]';
+                    } else if (door.is_open) {
+                        badge.innerText = 'OPEN';
+                        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-600 text-white font-mono';
+                        card.className = 'bg-cardbg border-2 border-emerald-500 rounded-xl p-4 transition-all shadow-lg shadow-emerald-900/40 flex flex-col justify-between min-h-[140px]';
+                    } else {
+                        badge.innerText = 'SHUT';
+                        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono';
+                        card.className = 'bg-cardbg border border-gray-700/80 rounded-xl p-4 transition-all flex flex-col justify-between min-h-[140px]';
+                    }
+                }
+
+                // Classified Items List
+                renderClassifiedItems(data.recent_items);
+
+            } catch (err) {
+                console.error("Dashboard poll error:", err);
+            }
+        }
+
+        function renderClassifiedItems(items) {
+            const listEl = document.getElementById('classifiedItemsList');
+            if (!items || items.length === 0) return;
+
+            const categoryStyles = {
+                'HAZARD': { color: 'text-red-400', border: 'border-red-500/60', icon: 'fa-triangle-exclamation', bg: 'bg-red-950/40' },
+                'E-WASTE': { color: 'text-cyan-400', border: 'border-cyan-500/60', icon: 'fa-microchip', bg: 'bg-cyan-950/40' },
+                'PAPER': { color: 'text-yellow-400', border: 'border-yellow-500/60', icon: 'fa-box-archive', bg: 'bg-yellow-950/40' },
+                'RECYCLABLE': { color: 'text-emerald-400', border: 'border-emerald-500/60', icon: 'fa-bottle-water', bg: 'bg-emerald-950/40' },
+                'ORGANIC': { color: 'text-orange-400', border: 'border-orange-500/60', icon: 'fa-apple-whole', bg: 'bg-orange-950/40' }
+            };
+
+            let html = '';
+            for (const item of items) {
+                const style = categoryStyles[item.category] || { color: 'text-gray-400', border: 'border-gray-700', icon: 'fa-tag', bg: 'bg-cardbg' };
+                const confPercent = Math.round(item.confidence * 100);
+                const sourceBadge = item.source === 'MANUAL TRIGGER'
+                    ? `<span class="text-[9px] bg-purple-900/60 text-purple-300 border border-purple-500/30 px-1 py-0.2 rounded font-mono">TEST</span>`
+                    : `<span class="text-[9px] bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 px-1 py-0.2 rounded font-mono">CAM</span>`;
+
+                html += `
+                <div class="${style.bg} border ${style.border} rounded-xl p-3 flex items-center justify-between shadow-sm transition hover:border-gray-500">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg bg-gray-900/90 border border-gray-700/80 flex items-center justify-center ${style.color} text-sm shadow-inner">
+                            <i class="fa-solid ${style.icon}"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-gray-100 uppercase tracking-wide flex items-center gap-1.5">
+                                <span>${item.name}</span>
+                                ${sourceBadge}
+                            </div>
+                            <div class="text-[10px] ${style.color} font-medium mt-0.5">
+                                DOOR ${item.door_id}: ${item.category}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right font-mono">
+                        <div class="text-xs font-bold text-gray-200">
+                            ${confPercent}%
+                        </div>
+                        <div class="text-[10px] text-gray-400">
+                            ${item.time}
+                        </div>
+                    </div>
+                </div>
+                `;
+            }
+            listEl.innerHTML = html;
+        }
+
+        function updateCameraDropdown(cameras, activeId) {
+            if (!cameras || cameras.length === 0) return;
+            const dropdown = document.getElementById('cameraSelectDropdown');
+            if (!dropdown) return;
+
+            const camKey = cameras.map(c => `${c.id}:${c.name}`).join('|');
+            if (dropdown.dataset.camerasKey !== camKey) {
+                dropdown.dataset.camerasKey = camKey;
+                dropdown.innerHTML = '';
+                cameras.forEach(cam => {
+                    const opt = document.createElement('option');
+                    opt.value = cam.id;
+                    opt.innerText = cam.name;
+                    dropdown.appendChild(opt);
+                });
+            }
+
+            if (document.activeElement !== dropdown) {
+                dropdown.value = activeId;
+            }
+        }
+
+        function reloadStream() {
+            const img = document.getElementById('camStreamImg');
+            if (img) {
+                img.src = '/video_cam?t=' + Date.now();
+            }
+        }
+
+        async function onCameraDropdownChange(camId) {
+            await fetch(`/api/switch_camera/${camId}`);
+            updateState();
+            // Re-bind video stream socket so browser connects cleanly to the newly active camera
+            setTimeout(reloadStream, 400);
+        }
+
+        async function rescanCameras() {
+            const icon = document.getElementById('rescanIcon');
+            if (icon) icon.classList.add('fa-spin');
+            try {
+                const res = await fetch('/api/rescan_cameras');
+                const data = await res.json();
+                if (data.available_cameras) {
+                    updateCameraDropdown(data.available_cameras, data.active_camera_id);
+                }
+            } catch (err) {
+                console.error("Rescan cameras error:", err);
+            } finally {
+                setTimeout(() => {
+                    if (icon) icon.classList.remove('fa-spin');
+                }, 400);
+            }
+        }
+
+        async function triggerDoor(doorId) {
+            await fetch(`/api/trigger_door/${doorId}`);
+            updateState();
+        }
+
+        async function togglePause() {
+            await fetch('/api/toggle_pause');
+            updateState();
+        }
+
+        async function resetCounters() {
+            await fetch('/api/reset');
+            updateState();
+        }
+
+        // Poll every 250ms
+        setInterval(updateState, 250);
+        updateState();
+    </script>
+</body>
+</html>
