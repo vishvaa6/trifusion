@@ -233,9 +233,13 @@ def camera_worker():
             det_result = detector.detect(frame)
             inf_ms = det_result.inference_time_ms
 
-            # 2. Draw Bounding Boxes and Classification Labels (if enabled)
+            # 2. Draw Bounding Boxes and Classification Labels ONLY for selected framed objects
             if state.show_rectangle_labels:
                 for item in det_result.items:
+                    # Only show rectangular frame if item is selected ("other wise no")
+                    if not item.has_frame:
+                        continue
+
                     x1, y1, x2, y2 = item.bbox
                     color = item.color_bgr
                     door_id = item.door_id
@@ -269,8 +273,11 @@ def camera_worker():
                     cv2.putText(frame, dest_text, (x1 + 2, min(WEBCAM_HEIGHT - 6, y2 + 16)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1)
 
-            # 3. Process items for door actuation, feeds, and HUD
+            # 3. Process items for door actuation, feeds, and HUD (only for framed objects)
             for item in det_result.items:
+                if not item.has_frame:
+                    continue
+
                 door_id = item.door_id
                 cat_name = item.category
                 detected_in_frame.append(item.class_name.title())
@@ -396,7 +403,9 @@ def api_state():
             "total_sorted": logger.total_scanned_count,
             "doors": doors_data,
             "recent_items": list(state.recent_items),
-            "show_rectangle_labels": state.show_rectangle_labels
+            "show_rectangle_labels": state.show_rectangle_labels,
+            "framed_objects_count": len([c for c in detector.get_class_catalog() if c["is_enabled"]]),
+            "total_objects_count": 80
         })
 
 
@@ -424,6 +433,37 @@ def api_rescan_cameras():
     })
 
 
+@app.route('/api/object_collections')
+def api_object_collections():
+    """Return all object collections and their frame status."""
+    collections = detector.get_collections_status()
+    catalog = detector.get_class_catalog()
+    enabled_count = len([c for c in catalog if c["is_enabled"]])
+    return jsonify({
+        "collections": collections,
+        "enabled_count": enabled_count,
+        "total_count": len(catalog)
+    })
+
+
+@app.route('/api/toggle_collection', methods=['POST'])
+def api_toggle_collection():
+    """Toggle rectangular frames on or off for all objects in a collection."""
+    data = request.get_json(force=True, silent=True) or {}
+    col_id = data.get('collection_id', '')
+    enable = bool(data.get('enable', True))
+    collections = detector.toggle_collection_frames(col_id, enable)
+    catalog = detector.get_class_catalog()
+    enabled_count = len([c for c in catalog if c["is_enabled"]])
+    return jsonify({
+        "success": True,
+        "collection_id": col_id,
+        "is_enabled": enable,
+        "collections": collections,
+        "enabled_count": enabled_count,
+        "total_count": len(catalog)
+    })
+
 @app.route('/api/object_filters', methods=['GET', 'POST'])
 def api_object_filters():
     """Retrieve or update active object detection filters."""
@@ -436,7 +476,8 @@ def api_object_filters():
         return jsonify({
             "success": True,
             "enabled_count": enabled_count,
-            "total_count": len(catalog)
+            "total_count": len(catalog),
+            "collections": detector.get_collections_status()
         })
 
     catalog = detector.get_class_catalog()
@@ -444,7 +485,8 @@ def api_object_filters():
     return jsonify({
         "catalog": catalog,
         "enabled_count": enabled_count,
-        "total_count": len(catalog)
+        "total_count": len(catalog),
+        "collections": detector.get_collections_status()
     })
 
 
@@ -482,7 +524,8 @@ def api_filter_preset(preset: str):
         "success": True,
         "preset": preset_lower,
         "enabled_count": enabled_count,
-        "total_count": len(catalog)
+        "total_count": len(catalog),
+        "collections": detector.get_collections_status()
     })
 
 

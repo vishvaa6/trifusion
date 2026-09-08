@@ -29,6 +29,7 @@ class DetectedItem:
     color_bgr: Tuple[int, int, int]
     is_hazard: bool
     center_pos: Tuple[int, int]
+    has_frame: bool = True  # Whether to display the rectangular frame and HUD labels
 
 
 @dataclass
@@ -39,6 +40,108 @@ class DetectionResult:
     inference_time_ms: float
     gpu_memory_used_mb: float = 0.0
 
+
+# -----------------------------------------------------------------------------
+# Object Collections Taxonomy for Frame Visibility Toggles
+# -----------------------------------------------------------------------------
+OBJECT_COLLECTIONS: Dict[str, dict] = {
+    "stationery": {
+        "id": "stationery",
+        "name": "Stationery & Desk",
+        "icon": "fa-pen-ruler",
+        "color": "amber",
+        "description": "Notebooks, books, scissors, bags & desk tools",
+        "classes": ["book", "scissors", "backpack", "clock", "cell phone", "laptop", "mouse", "keyboard", "toothbrush"]
+    },
+    "hazard": {
+        "id": "hazard",
+        "name": "Hazardous & Sharps",
+        "icon": "fa-triangle-exclamation",
+        "color": "red",
+        "description": "Blades, shears, glassware & hazardous items",
+        "classes": ["knife", "scissors", "bottle"]
+    },
+    "ewaste": {
+        "id": "ewaste",
+        "name": "Electronics & E-Waste",
+        "icon": "fa-microchip",
+        "color": "cyan",
+        "description": "Computers, phones, remotes & peripherals",
+        "classes": ["laptop", "cell phone", "tv", "mouse", "keyboard", "remote", "microwave", "toaster", "clock"]
+    },
+    "paper": {
+        "id": "paper",
+        "name": "Paper & Cardboard",
+        "icon": "fa-book-open",
+        "color": "yellow",
+        "description": "Books, boxes, fiber & paper materials",
+        "classes": ["book"]
+    },
+    "recyclable": {
+        "id": "recyclable",
+        "name": "Plastics & Tableware",
+        "icon": "fa-bottle-water",
+        "color": "emerald",
+        "description": "Bottles, cups, bowls, forks & spoons",
+        "classes": ["cup", "fork", "spoon", "bowl", "wine glass", "bottle", "vase"]
+    },
+    "organic": {
+        "id": "organic",
+        "name": "Food & Organics",
+        "icon": "fa-apple-whole",
+        "color": "orange",
+        "description": "Fruits, vegetables, bread & food scraps",
+        "classes": ["banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake"]
+    },
+    "furniture": {
+        "id": "furniture",
+        "name": "Furniture & Home",
+        "icon": "fa-couch",
+        "color": "slate",
+        "description": "Chairs, sofas, beds, tables & fixtures",
+        "classes": ["chair", "couch", "potted plant", "bed", "dining table", "toilet", "sink", "refrigerator", "oven"]
+    },
+    "people": {
+        "id": "people",
+        "name": "People",
+        "icon": "fa-user",
+        "color": "blue",
+        "description": "Ambient human presence",
+        "classes": ["person"]
+    },
+    "accessories": {
+        "id": "accessories",
+        "name": "Accessories & Bags",
+        "icon": "fa-briefcase",
+        "color": "purple",
+        "description": "Backpacks, handbags, ties & luggage",
+        "classes": ["backpack", "umbrella", "handbag", "tie", "suitcase", "hair drier"]
+    },
+    "vehicles": {
+        "id": "vehicles",
+        "name": "Vehicles & Transit",
+        "icon": "fa-car",
+        "color": "teal",
+        "description": "Cars, bicycles, motorcycles, trucks & signals",
+        "classes": ["bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter"]
+    },
+    "animals": {
+        "id": "animals",
+        "name": "Animals & Pets",
+        "icon": "fa-paw",
+        "color": "amber",
+        "description": "Domestic pets, wildlife & toys",
+        "classes": ["bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "teddy bear"]
+    },
+    "sports": {
+        "id": "sports",
+        "name": "Sports & Leisure",
+        "icon": "fa-futbol",
+        "color": "indigo",
+        "description": "Balls, bats, skateboards & sporting gear",
+        "classes": ["frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bench"]
+    }
+}
 
 # Stationery and Office Desk items recognized in COCO
 STATIONERY_CLASSES: Set[str] = {
@@ -170,9 +273,64 @@ class WasteDetector:
                 "is_hazard": is_haz,
                 "is_waste": (door_id is not None),
                 "is_stationery": (name_lower in STATIONERY_CLASSES),
-                "is_enabled": is_enabled
+                "is_enabled": is_enabled,
+                "has_frame": is_enabled,
+                "collections": [cid for cid, cdata in OBJECT_COLLECTIONS.items() if name_lower in cdata["classes"]]
             })
         return catalog
+
+    def is_frame_enabled(self, class_name: str) -> bool:
+        """Check if an object class is selected to display a rectangular frame."""
+        name_lower = class_name.lower().strip()
+        if self.enabled_classes is None:
+            return True
+        return name_lower in self.enabled_classes
+
+    def toggle_collection_frames(self, collection_id: str, enable: bool) -> List[dict]:
+        """Enable or disable rectangular frames for all items in a given collection."""
+        col = OBJECT_COLLECTIONS.get(collection_id)
+        if not col:
+            return self.get_collections_status()
+
+        # If currently all enabled (None), instantiate full 80-set first
+        if self.enabled_classes is None:
+            if self.is_ready and self.model:
+                self.enabled_classes = {name.lower().strip() for name in self.model.names.values()}
+            else:
+                self.enabled_classes = set()
+
+        col_classes = {c.lower().strip() for c in col["classes"]}
+        if enable:
+            self.enabled_classes.update(col_classes)
+        else:
+            self.enabled_classes.difference_update(col_classes)
+
+        return self.get_collections_status()
+
+    def get_collections_status(self) -> List[dict]:
+        """Returns live status of all collections with framed item counts."""
+        catalog = self.get_class_catalog()
+        catalog_map = {c["name"].lower().strip(): c["is_enabled"] for c in catalog}
+
+        status_list = []
+        for col_id, col in OBJECT_COLLECTIONS.items():
+            classes = col["classes"]
+            total = len(classes)
+            framed_count = sum(1 for c in classes if catalog_map.get(c.lower().strip(), False))
+            status_list.append({
+                "id": col_id,
+                "name": col["name"],
+                "icon": col["icon"],
+                "color": col["color"],
+                "description": col["description"],
+                "classes": classes,
+                "total_count": total,
+                "framed_count": framed_count,
+                "is_enabled": (framed_count == total and total > 0),
+                "is_partial": (0 < framed_count < total)
+            })
+        return status_list
+
 
     def detect(self, frame: np.ndarray, offset_x: int = 0, offset_y: int = 0) -> DetectionResult:
         """
@@ -212,9 +370,8 @@ class WasteDetector:
                     class_name = self.model.names.get(cls_id, f"class_{cls_id}")
                     name_lower = class_name.lower().strip()
 
-                    # Check if this class is toggled off / filtered out
-                    if self.enabled_classes is not None and name_lower not in self.enabled_classes:
-                        continue
+                    # Determine whether this object is selected to have a rectangular frame
+                    has_frame = self.is_frame_enabled(name_lower)
 
                     # Coordinate bounding box
                     xyxy = box.xyxy[0].cpu().numpy()
@@ -225,7 +382,7 @@ class WasteDetector:
 
                     # Determine Door & Category
                     door_id, category, color_bgr, is_hazard = self.get_category_info(name_lower)
-                    if is_hazard:
+                    if is_hazard and has_frame:
                         has_hazard = True
 
                     center_x = (x1 + x2) // 2
@@ -239,7 +396,8 @@ class WasteDetector:
                         category=category,
                         color_bgr=color_bgr,
                         is_hazard=is_hazard,
-                        center_pos=(center_x, center_y)
+                        center_pos=(center_x, center_y),
+                        has_frame=has_frame
                     ))
 
         except Exception as e:

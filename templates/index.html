@@ -169,6 +169,9 @@
                             </label>
                             <span id="rectLabelStatus" class="text-[10px] text-cyan-400 font-mono font-bold select-none">ON</span>
                         </div>
+                        <span id="camFramedObjectsBadge" class="text-[10px] bg-cyan-950/90 text-cyan-300 border border-cyan-800 px-2 py-1 rounded-lg font-mono font-bold hidden sm:inline" title="Selected objects shown with rectangular frames">
+                            Framed: 80 / 80
+                        </span>
 
                         <!-- CAMERA SOURCE SELECTOR -->
                         <div class="flex items-center gap-1">
@@ -403,13 +406,13 @@
                     <div>
                         <div class="flex items-center gap-2">
                             <h3 class="text-sm font-bold text-white uppercase tracking-wider">
-                                Detection &amp; Label Filters
+                                Object Collections &amp; Frame Visibility
                             </h3>
                             <span id="modalActivePill" class="text-[10px] bg-cyan-900/60 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
-                                80 / 80 Active
+                                80 / 80 Framed
                             </span>
                         </div>
-                        <p class="text-[11px] text-gray-400">Toggle which objects YOLO11 will display on screen and route to sorting doors.</p>
+                        <p class="text-[11px] text-gray-400">Enable or disable rectangular frames for specific collections or individual objects. Unselected objects will NOT display frames on the video stream.</p>
                     </div>
                 </div>
                 <button onclick="closeFilterModal()" class="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition">
@@ -446,6 +449,27 @@
                         class="w-full bg-cardbg text-gray-200 border border-gray-700 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-cyan-400 font-mono transition">
                 </div>
             </div>
+
+            <!-- OBJECT COLLECTIONS SECTION (SHOW/HIDE FRAMES BY GROUP) -->
+            <div class="px-6 py-3 bg-darkbg/70 border-b border-gray-800">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-cyan-400 text-xs"></i>
+                        <h4 class="text-xs font-bold text-gray-200 uppercase tracking-wider font-mono">
+                            Collections (Toggle Frames by Group)
+                        </h4>
+                    </div>
+                    <span class="text-[10px] text-gray-500 font-mono hidden sm:inline">
+                        Use switch to frame collection, or click card to filter items
+                    </span>
+                </div>
+                
+                <!-- Collections Cards Grid -->
+                <div id="collectionsCardsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 text-xs font-mono">
+                    <!-- Populated dynamically via loadFilterCatalog -->
+                </div>
+            </div>
+
 
             <!-- CATEGORY CHIP FILTERS -->
             <div class="px-6 py-2 bg-panelbg border-b border-gray-800 flex flex-wrap items-center gap-2 text-[11px] font-mono">
@@ -710,15 +734,96 @@
         // -------------------------------------------------------------
         // OBJECT FILTER MODAL & DYNAMIC TOGGLING LOGIC
         // -------------------------------------------------------------
+        let currentCollectionFilter = null;
+        let collectionsData = [];
+
         async function loadFilterCatalog() {
             try {
                 const res = await fetch('/api/object_filters');
                 const data = await res.json();
                 filterCatalog = data.catalog || [];
+                collectionsData = data.collections || [];
                 updateFilterBadges(data.enabled_count, data.total_count);
+                renderCollectionsCards();
                 renderObjectChips();
             } catch (err) {
                 console.error('Error loading filter catalog:', err);
+            }
+        }
+
+        function renderCollectionsCards() {
+            const grid = document.getElementById('collectionsCardsGrid');
+            if (!grid) return;
+
+            const iconColors = {
+                'amber': 'text-amber-400',
+                'red': 'text-red-400',
+                'cyan': 'text-cyan-400',
+                'yellow': 'text-yellow-400',
+                'emerald': 'text-emerald-400',
+                'orange': 'text-orange-400',
+                'slate': 'text-gray-400',
+                'blue': 'text-blue-400',
+                'purple': 'text-purple-400',
+                'teal': 'text-teal-400',
+                'indigo': 'text-indigo-400'
+            };
+
+            let html = '';
+            collectionsData.forEach(col => {
+                const isSelected = (currentCollectionFilter === col.id);
+                const colorClass = iconColors[col.color] || 'text-cyan-400';
+                const cardBorder = isSelected 
+                    ? 'border-cyan-400 bg-cyan-950/30' 
+                    : (col.is_enabled ? 'border-gray-700 bg-cardbg' : 'border-gray-800/80 bg-gray-900/40 opacity-70');
+                const badgeStyle = col.is_enabled 
+                    ? 'text-cyan-300 font-bold' 
+                    : (col.is_partial ? 'text-yellow-400 font-bold' : 'text-gray-500');
+
+                html += `
+                <div onclick="selectCollectionFilter('${col.id}')"
+                    class="${cardBorder} hover:border-cyan-500/50 rounded-xl p-2.5 flex items-center justify-between cursor-pointer transition select-none shadow-sm group">
+                    <div class="truncate mr-2 flex-1">
+                        <div class="font-bold text-gray-200 truncate flex items-center gap-1.5 text-xs">
+                            <i class="fa-solid ${col.icon} ${colorClass} text-xs"></i>
+                            <span class="truncate">${col.name}</span>
+                        </div>
+                        <div class="text-[9px] ${badgeStyle} truncate mt-0.5 font-mono">
+                            ${col.framed_count} / ${col.total_count} Framed
+                        </div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer select-none ml-1" onclick="event.stopPropagation()">
+                        <input type="checkbox" ${col.is_enabled ? 'checked' : ''} onchange="toggleCollection('${col.id}', this.checked)" class="sr-only peer">
+                        <div class="w-7 h-3.5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
+                    </label>
+                </div>
+                `;
+            });
+            grid.innerHTML = html;
+        }
+
+        function selectCollectionFilter(colId) {
+            if (currentCollectionFilter === colId) {
+                currentCollectionFilter = null; // Toggle off filter
+            } else {
+                currentCollectionFilter = colId;
+                currentCategoryFilter = 'ALL';
+            }
+            renderCollectionsCards();
+            renderObjectChips();
+        }
+
+        async function toggleCollection(colId, enable) {
+            try {
+                const res = await fetch('/api/toggle_collection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ collection_id: colId, enable: enable })
+                });
+                const data = await res.json();
+                loadFilterCatalog();
+            } catch (err) {
+                console.error('Error toggling collection:', err);
             }
         }
 
@@ -794,7 +899,10 @@
 
             let filtered = filterCatalog.filter(item => {
                 let matchCat = false;
-                if (currentCategoryFilter === 'ALL') {
+                if (currentCollectionFilter) {
+                    const col = collectionsData.find(c => c.id === currentCollectionFilter);
+                    matchCat = col && col.classes.includes(item.name.toLowerCase().strip ? item.name.toLowerCase().strip() : item.name.toLowerCase());
+                } else if (currentCategoryFilter === 'ALL') {
                     matchCat = true;
                 } else if (currentCategoryFilter === 'STATIONERY') {
                     matchCat = !!item.is_stationery;
@@ -817,6 +925,10 @@
                 const cardBg = isChecked ? 'bg-cardbg/90' : 'bg-gray-900/40 opacity-55';
                 const tagLabel = item.door_id ? `Door ${item.door_id}` : 'Other';
 
+                const frameBadge = isChecked
+                    ? '<span class="px-1.5 py-0.5 rounded text-[8px] font-bold border border-cyan-500/40 bg-cyan-950/80 text-cyan-300 font-mono flex items-center gap-1"><i class="fa-regular fa-square"></i> FRAME ON</span>'
+                    : '<span class="px-1.5 py-0.5 rounded text-[8px] font-bold border border-gray-700 bg-gray-800 text-gray-500 font-mono flex items-center gap-1"><i class="fa-regular fa-square"></i> NO FRAME</span>';
+
                 html += `
                 <div onclick="toggleSingleClass('${item.name}')"
                     class="${cardBg} border ${isChecked ? cStyle.border : 'border-gray-800'} hover:border-cyan-400/80 rounded-xl p-2.5 flex items-center justify-between cursor-pointer transition select-none shadow-sm">
@@ -824,11 +936,11 @@
                         <div class="font-bold text-gray-200 capitalize truncate text-xs">
                             ${item.name}
                         </div>
-                        <div class="text-[9px] text-gray-400 truncate mt-0.5 flex items-center gap-1">
+                        <div class="text-[9px] text-gray-400 truncate mt-0.5 flex items-center gap-1.5">
+                            ${frameBadge}
                             <span class="px-1.5 py-0.2 rounded font-mono text-[8px] border ${cStyle.badge}">
                                 ${tagLabel}
                             </span>
-                            <span class="truncate">${item.category}</span>
                         </div>
                     </div>
                     <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSingleClass('${item.name}')"
@@ -883,10 +995,12 @@
         function updateFilterBadges(enabledCount, totalCount) {
             const badge = document.getElementById('filterCountBadge');
             if (badge) badge.innerText = `${enabledCount}`;
+            const camBadge = document.getElementById('camFramedObjectsBadge');
+            if (camBadge) camBadge.innerText = `Framed: ${enabledCount} / ${totalCount}`;
             const modalBadge = document.getElementById('modalActivePill');
-            if (modalBadge) modalBadge.innerText = `${enabledCount} / ${totalCount} Active`;
+            if (modalBadge) modalBadge.innerText = `${enabledCount} / ${totalCount} Framed`;
             const statusText = document.getElementById('modalStatusText');
-            if (statusText) statusText.innerText = `${enabledCount} of ${totalCount} objects active for detection & labeling`;
+            if (statusText) statusText.innerText = `${enabledCount} of ${totalCount} objects selected to display rectangular frames`;
         }
 
         // Initial setup
