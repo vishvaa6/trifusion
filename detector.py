@@ -5,6 +5,7 @@ Wraps Ultralytics YOLOv8 with FP16 CUDA acceleration for RTX 3050,
 """
 
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 import cv2
@@ -905,3 +906,386 @@ class WasteDetector:
             inference_time_ms=inference_time_ms,
             gpu_memory_used_mb=vram_used
         )
+
+
+# =============================================================================
+# Dual-Stream AI Comparison Engine
+# Runs YOLO11n (Nano) + YOLO11s (Small) on the same frame simultaneously,
+# producing side-by-side annotated frames and conflict detection alerts.
+# =============================================================================
+
+class DualConflict:
+    """Represents a routing conflict between the two models on the same object region."""
+    def __init__(self, class_name: str, display_name: str,
+                 door_a: int, door_b: int,
+                 conf_a: float, conf_b: float,
+                 bbox: Tuple[int, int, int, int]):
+        self.class_name = class_name
+        self.display_name = display_name
+        self.door_a = door_a    # YOLO11n decision
+        self.door_b = door_b    # YOLO11s decision
+        self.conf_a = conf_a
+        self.conf_b = conf_b
+        self.bbox = bbox
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "class_name": self.class_name,
+            "display_name": self.display_name,
+            "door_a": self.door_a,
+            "door_b": self.door_b,
+            "conf_a": round(self.conf_a, 2),
+            "conf_b": round(self.conf_b, 2),
+        }
+
+
+class DualStreamDetector:
+    """
+    Dual-model AI comparison engine.
+
+    Model A: YOLO11n (Nano)  — fast, lightweight  — cyan boxes on left half
+    Model B: YOLO11s (Small) — accurate, heavier   — violet boxes on right half
+
+    Safe rollback per model:
+    - If Model B fails to load (download error, memory), dual mode is disabled cleanly.
+    - If Model B crashes at runtime 3x in a row, it is marked OFFLINE; Model A continues.
+    - Disabling dual mode immediately frees Model B from memory.
+    """
+
+    # Colors for left (Nano) and right (Small) streams
+    COLOR_A = (0, 240, 200)     # Cyan-teal for YOLO11n
+    COLOR_B = (200, 50, 255)    # Violet for YOLO11s
+
+    MODEL_A_NAME = "yolo11n.pt"
+    MODEL_B_NAME = "yolo11s.pt"
+
+    def __init__(self, detector_a: "WasteDetector"):
+        """
+        Args:
+            detector_a: The already-initialized primary WasteDetector (YOLO11n).
+                        DualStreamDetector borrows it; it does NOT own it.
+        """
+        self.detector_a = detector_a
+        self.detector_b: Optional["WasteDetector"] = None
+
+        self.enabled = False
+        self.model_b_online = False
+        self.model_b_status = "NOT LOADED"   # Human-readable status string
+        self.model_b_error_count = 0
+        self.MAX_B_ERRORS = 3
+
+        # Runtime stats
+        self.total_conflicts = 0
+        self.conflict_log: "deque[DualConflict]" = deque(maxlen=30)
+        self.last_ms_a = 0.0
+        self.last_ms_b = 0.0
+        self.last_det_a = 0
+        self.last_det_b = 0
+        self.last_conf_a = 0.0
+        self.last_conf_b = 0.0
+        self.agreement_pct = 100.0
+
+    # ------------------------------------------------------------------
+    # Enable / Disable
+    # ------------------------------------------------------------------
+
+    def enable(self) -> Tuple[bool, str]:
+        """
+        Lazy-load YOLO11s (Model B) and enable dual-stream mode.
+        Returns (success, message).
+        """
+        if self.enabled and self.model_b_online:
+            return True, "Dual-stream already active."
+
+        print("[DualStream] Loading Model B (YOLO11s)...")
+        try:
+            self.detector_b = WasteDetector(
+                model_path=self.MODEL_B_NAME,
+                conf_threshold=self.detector_a.conf_threshold,
+                transparent_conf_threshold=self.detector_a.transparent_conf_threshold,
+            )
+            if not self.detector_b.is_ready:
+                raise RuntimeError("YOLO11s failed to initialize (is_ready=False)")
+
+            self.model_b_online = True
+            self.model_b_status = "ONLINE"
+            self.model_b_error_count = 0
+            self.enabled = True
+            print("[DualStream] Model B (YOLO11s) loaded. Dual-stream ACTIVE.")
+            return True, "Dual-stream enabled. YOLO11s loaded."
+
+        except Exception as e:
+            self.model_b_online = False
+            self.model_b_status = f"LOAD ERROR: {e}"
+            self.enabled = False
+            self.detector_b = None
+            print(f"[DualStream] Model B load failed: {e}. Single-stream continues.")
+            return False, f"Model B (yolo11s.pt) failed to load: {e}"
+
+    def disable(self) -> None:
+        """Disable dual-stream and free Model B memory."""
+        self.enabled = False
+        self.model_b_online = False
+        self.model_b_status = "UNLOADED"
+        self.detector_b = None
+        print("[DualStream] Dual-stream disabled. Model B freed from memory.")
+
+    # ------------------------------------------------------------------
+    # Dual Detection
+    # ------------------------------------------------------------------
+
+    def dual_detect(self, frame: np.ndarray) -> Tuple[
+        "DetectionResult", Optional["DetectionResult"], List[DualConflict]
+    ]:
+        """
+        Run both models on the same frame and return (result_a, result_b, conflicts).
+        If dual is disabled or Model B is offline, result_b = None, conflicts = [].
+        """
+        result_a = self.detector_a.detect(frame)
+        self.last_ms_a = result_a.inference_time_ms
+        self.last_det_a = len(result_a.items)
+        if result_a.items:
+            self.last_conf_a = sum(i.confidence for i in result_a.items) / len(result_a.items)
+
+        if not self.enabled or not self.model_b_online or self.detector_b is None:
+            return result_a, None, []
+
+        # Run Model B with fault tolerance
+        result_b = None
+        try:
+            result_b = self.detector_b.detect(frame)
+            self.last_ms_b = result_b.inference_time_ms
+            self.last_det_b = len(result_b.items)
+            if result_b.items:
+                self.last_conf_b = sum(i.confidence for i in result_b.items) / len(result_b.items)
+            self.model_b_error_count = 0  # reset on success
+        except Exception as e:
+            self.model_b_error_count += 1
+            print(f"[DualStream] Model B runtime error #{self.model_b_error_count}: {e}")
+            if self.model_b_error_count >= self.MAX_B_ERRORS:
+                self.model_b_online = False
+                self.model_b_status = f"OFFLINE ({self.MAX_B_ERRORS} consecutive errors)"
+                print("[DualStream] Model B marked OFFLINE after repeated failures.")
+            return result_a, None, []
+
+        # Conflict detection: match items by overlapping class name
+        conflicts = self._find_conflicts(result_a, result_b)
+        for c in conflicts:
+            self.conflict_log.appendleft(c)
+        self.total_conflicts += len(conflicts)
+
+        # Agreement %: fraction of classes detected by both that agree on door
+        self._update_agreement(result_a, result_b)
+
+        return result_a, result_b, conflicts
+
+    def _find_conflicts(
+        self,
+        result_a: "DetectionResult",
+        result_b: "DetectionResult"
+    ) -> List[DualConflict]:
+        """Match items by class_name and flag when door routing differs."""
+        conflicts: List[DualConflict] = []
+        map_b: Dict[str, "DetectedItem"] = {}
+        for item in result_b.items:
+            map_b[item.class_name.lower()] = item
+
+        for item_a in result_a.items:
+            key = item_a.class_name.lower()
+            item_b = map_b.get(key)
+            if item_b is None:
+                continue
+            if item_a.door_id != item_b.door_id:
+                conflicts.append(DualConflict(
+                    class_name=item_a.class_name,
+                    display_name=item_a.display_name or item_a.class_name.title(),
+                    door_a=item_a.door_id,
+                    door_b=item_b.door_id,
+                    conf_a=item_a.confidence,
+                    conf_b=item_b.confidence,
+                    bbox=item_a.bbox,
+                ))
+        return conflicts
+
+    def _update_agreement(
+        self,
+        result_a: "DetectionResult",
+        result_b: "DetectionResult"
+    ) -> None:
+        """Compute running agreement % between both models."""
+        names_a = {i.class_name.lower(): i.door_id for i in result_a.items}
+        names_b = {i.class_name.lower(): i.door_id for i in result_b.items}
+        shared = set(names_a) & set(names_b)
+        if not shared:
+            return
+        agreed = sum(1 for k in shared if names_a[k] == names_b[k])
+        self.agreement_pct = (agreed / len(shared)) * 100.0
+
+    # ------------------------------------------------------------------
+    # Split Frame Rendering
+    # ------------------------------------------------------------------
+
+    def build_split_frame(
+        self,
+        frame: np.ndarray,
+        result_a: "DetectionResult",
+        result_b: Optional["DetectionResult"],
+        conflicts: List[DualConflict],
+        show_boxes: bool = True,
+    ) -> np.ndarray:
+        """
+        Render a side-by-side comparison frame:
+        - Left half: YOLO11n Nano detections (cyan boxes)
+        - Right half: YOLO11s Small detections (violet boxes)
+        - Center divider with model labels
+        - Conflict items: red flash border on both sides
+        """
+        h, w = frame.shape[:2]
+        mid = w // 2
+
+        # Build conflict class set for quick lookup
+        conflict_classes = {c.class_name.lower() for c in conflicts}
+
+        # --- LEFT HALF: Nano ---
+        out = frame.copy()
+
+        if show_boxes:
+            for item in result_a.items:
+                if not item.has_frame:
+                    continue
+                x1, y1, x2, y2 = item.bbox
+                # Clip to left half
+                x2_clip = min(x2, mid - 2)
+                if x1 >= mid:
+                    continue
+
+                is_conflict = item.class_name.lower() in conflict_classes
+                box_color = (0, 60, 200) if is_conflict else self.COLOR_A
+                thickness = 3 if is_conflict else 2
+
+                cv2.rectangle(out, (x1, y1), (x2_clip, y2), box_color, thickness)
+                _draw_label(out, item, self.COLOR_A, "A", is_conflict)
+
+        # --- RIGHT HALF: Small ---
+        if result_b is not None and show_boxes:
+            for item in result_b.items:
+                if not item.has_frame:
+                    continue
+                x1, y1, x2, y2 = item.bbox
+                # Clip to right half
+                x1_clip = max(x1, mid + 2)
+                if x2 <= mid:
+                    continue
+
+                is_conflict = item.class_name.lower() in conflict_classes
+                box_color = (180, 20, 240) if is_conflict else self.COLOR_B
+                thickness = 3 if is_conflict else 2
+
+                cv2.rectangle(out, (x1_clip, y1), (x2, y2), box_color, thickness)
+                _draw_label_b(out, item, self.COLOR_B, "B", is_conflict, mid)
+
+        # --- Center Divider ---
+        cv2.line(out, (mid, 0), (mid, h), (200, 200, 200), 2)
+
+        # --- Model Labels (top-center each half) ---
+        # Left label: Nano
+        _draw_model_label(out, "  NANO  ", 8, 6, self.COLOR_A,
+                          f"{self.last_ms_a:.0f}ms", "A")
+        # Right label: Small
+        if result_b is not None:
+            _draw_model_label(out, "  SMALL  ", mid + 8, 6, self.COLOR_B,
+                              f"{self.last_ms_b:.0f}ms", "B")
+        else:
+            _draw_model_label(out, "  SMALL  ", mid + 8, 6, (80, 80, 80),
+                              "OFFLINE", "B")
+
+        # --- Conflict count at bottom ---
+        if conflicts:
+            msg = f"  CONFLICT: {len(conflicts)} item(s) routed to different doors  "
+            (tw, th), _ = cv2.getTextSize(msg, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
+            cx = (w - tw) // 2
+            cv2.rectangle(out, (cx - 4, h - th - 18), (cx + tw + 4, h - 4), (20, 0, 60), -1)
+            cv2.rectangle(out, (cx - 4, h - th - 18), (cx + tw + 4, h - 4), (160, 20, 240), 1)
+            cv2.putText(out, msg, (cx, h - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.38, (200, 140, 255), 1)
+
+        return out
+
+    # ------------------------------------------------------------------
+    # Status / Telemetry
+    # ------------------------------------------------------------------
+
+    def get_status(self) -> Dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "model_a": {
+                "name": self.MODEL_A_NAME,
+                "status": "ONLINE",
+                "device": self.detector_a.device_mode,
+                "inf_ms": round(self.last_ms_a, 1),
+                "detections": self.last_det_a,
+                "avg_conf_pct": round(self.last_conf_a * 100, 1),
+            },
+            "model_b": {
+                "name": self.MODEL_B_NAME,
+                "status": self.model_b_status,
+                "device": (self.detector_b.device_mode if self.detector_b else "N/A"),
+                "inf_ms": round(self.last_ms_b, 1),
+                "detections": self.last_det_b,
+                "avg_conf_pct": round(self.last_conf_b * 100, 1),
+            },
+            "total_conflicts": self.total_conflicts,
+            "agreement_pct": round(self.agreement_pct, 1),
+            "conflict_log": [c.to_dict() for c in list(self.conflict_log)[:10]],
+        }
+
+
+# ------------------------------------------------------------------
+# Helper drawing functions for DualStreamDetector
+# ------------------------------------------------------------------
+
+def _draw_label(frame: np.ndarray, item: "DetectedItem",
+                color: Tuple[int, int, int], side: str, is_conflict: bool) -> None:
+    """Draw label banner on left-side (Model A) detection."""
+    x1, y1 = item.bbox[0], item.bbox[1]
+    conf_pct = int(item.confidence * 100)
+    dname = (item.display_name or item.class_name).upper()
+    label = f"[{side}] {dname} {conf_pct}%"
+    if is_conflict:
+        label = f"⚠ {label}"
+    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.40, 1)
+    cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 8, y1),
+                  (10, 10, 16), -1)
+    cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 8, y1), color, 1)
+    cv2.putText(frame, label, (x1 + 4, y1 - 4),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.40, (255, 255, 255), 1)
+
+
+def _draw_label_b(frame: np.ndarray, item: "DetectedItem",
+                  color: Tuple[int, int, int], side: str,
+                  is_conflict: bool, mid: int) -> None:
+    """Draw label banner on right-side (Model B) detection."""
+    x1, y1 = max(item.bbox[0], mid + 2), item.bbox[1]
+    conf_pct = int(item.confidence * 100)
+    dname = (item.display_name or item.class_name).upper()
+    label = f"[{side}] {dname} {conf_pct}%"
+    if is_conflict:
+        label = f"⚠ {label}"
+    (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.40, 1)
+    cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 8, y1),
+                  (10, 10, 16), -1)
+    cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 8, y1), color, 1)
+    cv2.putText(frame, label, (x1 + 4, y1 - 4),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.40, (255, 255, 255), 1)
+
+
+def _draw_model_label(frame: np.ndarray, text: str, x: int, y: int,
+                      color: Tuple[int, int, int], speed: str, side: str) -> None:
+    """Draw model identity pill at top-left or top-right of each half."""
+    full = f"{text} {speed}"
+    (tw, th), _ = cv2.getTextSize(full, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
+    cv2.rectangle(frame, (x, y), (x + tw + 10, y + th + 10),
+                  (15, 15, 20), -1)
+    cv2.rectangle(frame, (x, y), (x + tw + 10, y + th + 10), color, 1)
+    cv2.putText(frame, full, (x + 5, y + th + 4),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1)

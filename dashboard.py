@@ -25,7 +25,7 @@ from config import (
     WEBCAM_HEIGHT,
     WEBCAM_WIDTH,
 )
-from detector import WasteDetector
+from detector import DualStreamDetector, WasteDetector
 from door_system import DoorSystem
 from error_matrix import error_matrix_tracker
 from logger import WasteLogger
@@ -111,6 +111,11 @@ class DashboardState:
         self.last_detection_timestamps = {}   # Cooldown per class to avoid spamming feed
         self.conf_threshold: float = CONFIDENCE_THRESHOLD
         self.show_rectangle_labels: bool = True  # Toggle for drawing bounding box rectangles and labels
+        # Dual-stream comparison mode state
+        self.dual_stream_enabled: bool = False
+        self.latest_dual_jpeg: Optional[bytes] = None
+        self.dual_conflicts: list = []
+        self.dual_stats: dict = {}
 
 state = DashboardState()
 
@@ -118,6 +123,7 @@ state = DashboardState()
 logger = WasteLogger()
 door_system = DoorSystem()
 detector = WasteDetector(conf_threshold=CONFIDENCE_THRESHOLD)
+dual_detector = DualStreamDetector(detector_a=detector)
 
 
 # -----------------------------------------------------------------------------
@@ -230,8 +236,16 @@ def camera_worker():
 
         # Only process inference if scanner is not paused
         if not state.scanner_paused:
-            # 1. Run YOLOv8 Inference on Realtime Camera Frame
-            det_result = detector.detect(frame)
+            # 1. Run AI Inference — single or dual model depending on mode
+            if state.dual_stream_enabled:
+                det_result, det_result_b, conflicts = dual_detector.dual_detect(frame)
+                with state.lock:
+                    state.dual_conflicts = [c.to_dict() for c in conflicts]
+                    state.dual_stats = dual_detector.get_status()
+            else:
+                det_result = detector.detect(frame)
+                det_result_b = None
+                conflicts = []
             inf_ms = det_result.inference_time_ms
 
             # 2. Draw Bounding Boxes and Classification Labels ONLY for selected framed objects
@@ -412,7 +426,10 @@ def api_state():
             "error_matrix_accuracy": error_matrix_tracker.get_summary()["overall_accuracy_pct"],
             "error_matrix_mse": error_matrix_tracker.get_summary()["overall_mse"],
             "error_matrix_total": error_matrix_tracker.get_summary()["total_evaluations"],
-            "device_telemetry": detector.get_device_telemetry()
+            "device_telemetry": detector.get_device_telemetry(),
+            "dual_stream_enabled": state.dual_stream_enabled,
+            "dual_stats": state.dual_stats,
+            "dual_conflicts": state.dual_conflicts[:5],
         })
 
 
@@ -702,6 +719,62 @@ def api_export_error_matrix():
     response.headers["Content-Disposition"] = "attachment; filename=mes_mse_error_matrix.csv"
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
     return response
+
+
+def generate_dual_stream():
+    """MJPEG streaming generator for dual-model comparison feed."""
+    while True:
+        with state.lock:
+            frame_bytes = state.latest_dual_jpeg
+        if frame_bytes is not None:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(0.040)  # ~25 fps dual stream
+
+
+@app.route('/video_dual')
+def video_dual():
+    """Stream the dual-model side-by-side comparison feed."""
+    return Response(generate_dual_stream(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.route('/api/dual_stream/toggle', methods=['GET', 'POST'])
+def api_dual_stream_toggle():
+    """Enable or disable dual-stream AI comparison mode."""
+    # Determine desired state
+    data = request.get_json(force=True, silent=True) or {}
+    enable = data.get('enable', None)
+    if enable is None:
+        enable = not state.dual_stream_enabled   # toggle if not specified
+
+    if enable:
+        ok, msg = dual_detector.enable()
+        with state.lock:
+            state.dual_stream_enabled = ok
+            if not ok:
+                state.latest_dual_jpeg = None
+    else:
+        dual_detector.disable()
+        with state.lock:
+            state.dual_stream_enabled = False
+            state.latest_dual_jpeg = None
+
+    return jsonify({
+        "success": True,
+        "dual_stream_enabled": state.dual_stream_enabled,
+        "dual_stats": dual_detector.get_status(),
+    })
+
+
+@app.route('/api/dual_stream/status')
+def api_dual_stream_status():
+    """Return per-model telemetry and conflict log for dual-stream mode."""
+    return jsonify({
+        "dual_stream_enabled": state.dual_stream_enabled,
+        "dual_stats": dual_detector.get_status(),
+        "dual_conflicts": state.dual_conflicts,
+    })
 
 
 def run_server(host="0.0.0.0", port=5000):

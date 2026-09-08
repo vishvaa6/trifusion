@@ -21,7 +21,7 @@ from config import (
     PALETTE,
     SESSION_REPORT_FILE,
 )
-from detector import WasteDetector
+from detector import DualStreamDetector, WasteDetector
 from door_system import DoorSystem
 from hud import SCADAVisualizer
 from logger import WasteLogger
@@ -331,6 +331,69 @@ def test_gpu_safe_rollback():
     print("  -> Passed! GPU telemetry, simulated OOM fallback, and zero-drop CPU inference verified.")
 
 
+def test_dual_stream_detector():
+    print("[TEST 10/10] Verifying DualStreamDetector — dual-model comparison and safe rollback...")
+
+    # 1. Primary detector initializes cleanly
+    det_a = WasteDetector()
+    assert det_a.is_ready is True, "Primary WasteDetector must be ready"
+
+    # 2. DualStreamDetector wraps primary without loading secondary model
+    dual = DualStreamDetector(detector_a=det_a)
+    assert dual.detector_a is det_a
+    assert dual.detector_b is None, "Model B must NOT be loaded until enable() is called"
+    assert dual.enabled is False
+
+    # 3. get_status() works before enabling
+    status = dual.get_status()
+    assert "enabled" in status
+    assert "model_a" in status
+    assert "model_b" in status
+    assert "total_conflicts" in status
+    assert "agreement_pct" in status
+    assert "conflict_log" in status
+
+    # 4. dual_detect() in disabled mode returns (result_a, None, [])
+    dummy_frame = np.random.randint(50, 200, (480, 640, 3), dtype=np.uint8)
+    r_a, r_b, conflicts = dual.dual_detect(dummy_frame)
+    assert r_a is not None, "result_a must always be returned"
+    assert r_b is None, "result_b must be None when dual is disabled"
+    assert conflicts == [], "Conflicts must be empty when dual is disabled"
+
+    # 5. Conflict detection logic (unit test with mocked items)
+    from detector import DetectedItem, DetectionResult
+    def make_result(door_id):
+        item = DetectedItem(
+            class_name="bottle", confidence=0.85,
+            bbox=(10, 10, 100, 200), door_id=door_id,
+            category="TEST", color_bgr=(0, 200, 200),
+            is_hazard=(door_id == 1), center_pos=(55, 105),
+            has_frame=True, display_name="Test Bottle"
+        )
+        return DetectionResult(items=[item], has_hazard=(door_id == 1), inference_time_ms=50.0)
+
+    result_a_mock = make_result(door_id=1)  # Model A → Hazard Door 1
+    result_b_mock = make_result(door_id=4)  # Model B → Recyclable Door 4
+
+    # Temporarily enable dual to test conflict detection
+    dual.enabled = True
+    dual.model_b_online = True
+    conflicts_found = dual._find_conflicts(result_a_mock, result_b_mock)
+    assert len(conflicts_found) == 1, f"Expected 1 conflict, got {len(conflicts_found)}"
+    c = conflicts_found[0]
+    assert c.class_name == "bottle"
+    assert c.door_a == 1
+    assert c.door_b == 4
+
+    # 6. disable() cleans up
+    dual.disable()
+    assert dual.enabled is False
+    assert dual.model_b_online is False
+    assert dual.detector_b is None
+
+    print("  -> Passed! DualStreamDetector init, dual_detect, conflict logic, and safe rollback verified.")
+
+
 if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("    RUNNING AI WASTE SEGREGATION INTEGRATION TESTS")
@@ -345,9 +408,10 @@ if __name__ == "__main__":
     test_transparent_object_enhancement()
     test_error_matrix_and_mse()
     test_gpu_safe_rollback()
+    test_dual_stream_detector()
 
     print("\n" + "=" * 60)
-    print("    ALL INTEGRATION TESTS PASSED SUCCESSFULLY! [9/9]")
+    print("    ALL INTEGRATION TESTS PASSED SUCCESSFULLY! [10/10]")
     print("=" * 60 + "\n")
 
 

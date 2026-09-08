@@ -211,6 +211,12 @@
                             class="px-2 py-1 bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white border border-gray-700 rounded-lg transition" aria-label="Reload video feed">
                             <i class="fa-solid fa-rotate text-[11px]"></i>
                         </button>
+                        <!-- DUAL COMPARE TOGGLE -->
+                        <button id="btnDualCompare" onclick="toggleDualStream()" title="Compare YOLO11n Nano vs YOLO11s Small side-by-side"
+                            class="px-2.5 py-1 rounded-lg bg-violet-950/70 hover:bg-violet-900 border border-violet-500/40 text-violet-300 text-xs font-semibold font-mono transition flex items-center gap-1.5 active:scale-95">
+                            <i class="fa-solid fa-code-branch text-[10px]"></i>
+                            <span class="hidden sm:inline">Compare</span>
+                        </button>
                     </div>
                 </div>
 
@@ -232,6 +238,110 @@
                             <span class="text-emerald-400 font-bold">YOLO11n</span>
                         </div>
                     </div>
+                </div>
+            </div>
+
+
+            <!-- ⚡ DUAL-STREAM AI COMPARISON PANEL (shows when Compare mode is ON) -->
+            <div id="dualStreamPanel" class="hidden bg-panelbg border border-violet-500/40 rounded-2xl overflow-hidden shadow-2xl">
+
+                <!-- Panel Header -->
+                <div class="bg-violet-950/60 px-4 py-2.5 border-b border-violet-700/50 flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-code-branch text-violet-400"></i>
+                        <span class="text-xs font-bold text-gray-100 uppercase tracking-wider font-mono">⚡ Dual AI Model Comparison</span>
+                        <span id="dualModeStatusBadge" class="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-violet-900/80 text-violet-300 border border-violet-500/40">LOADING...</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-gray-400 font-mono hidden sm:inline">Stream auto-switches when enabled</span>
+                        <button onclick="toggleDualStream()" class="px-2.5 py-1 rounded bg-violet-800/60 hover:bg-violet-700 border border-violet-500/50 text-violet-200 text-xs font-mono transition active:scale-95">
+                            <i class="fa-solid fa-xmark mr-1"></i>Disable
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Two-Column Model Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-0 divide-x divide-gray-800/80">
+                    <!-- Model A: YOLO11n Nano -->
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 flex-shrink-0"></span>
+                            <span class="text-xs font-bold text-cyan-300 font-mono uppercase tracking-wide">Model A — YOLO11n Nano</span>
+                            <span class="text-[9px] bg-cyan-950 text-cyan-400 border border-cyan-700 px-1.5 py-0.5 rounded font-mono ml-auto">LEFT</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-center font-mono">
+                            <div class="bg-darkbg/80 rounded-lg px-2 py-2 border border-gray-800">
+                                <div class="text-[9px] text-gray-500 mb-0.5">SPEED</div>
+                                <div id="dualMsA" class="text-sm font-bold text-cyan-400">-- ms</div>
+                            </div>
+                            <div class="bg-darkbg/80 rounded-lg px-2 py-2 border border-gray-800">
+                                <div class="text-[9px] text-gray-500 mb-0.5">DETECTED</div>
+                                <div id="dualDetA" class="text-sm font-bold text-gray-100">--</div>
+                            </div>
+                            <div class="bg-darkbg/80 rounded-lg px-2 py-2 border border-gray-800">
+                                <div class="text-[9px] text-gray-500 mb-0.5">AVG CONF</div>
+                                <div id="dualConfA" class="text-sm font-bold text-gray-300">--%</div>
+                            </div>
+                        </div>
+                        <div class="text-[10px] text-gray-500 font-mono">2.6M params · Fast · Optimised for edge</div>
+                    </div>
+
+                    <!-- Model B: YOLO11s Small -->
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-violet-400 flex-shrink-0"></span>
+                            <span class="text-xs font-bold text-violet-300 font-mono uppercase tracking-wide">Model B — YOLO11s Small</span>
+                            <span class="text-[9px] bg-violet-950 text-violet-400 border border-violet-700 px-1.5 py-0.5 rounded font-mono ml-auto">RIGHT</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-center font-mono">
+                            <div class="bg-darkbg/80 rounded-lg px-2 py-2 border border-gray-800">
+                                <div class="text-[9px] text-gray-500 mb-0.5">SPEED</div>
+                                <div id="dualMsB" class="text-sm font-bold text-violet-400">-- ms</div>
+                            </div>
+                            <div class="bg-darkbg/80 rounded-lg px-2 py-2 border border-gray-800">
+                                <div class="text-[9px] text-gray-500 mb-0.5">DETECTED</div>
+                                <div id="dualDetB" class="text-sm font-bold text-gray-100">--</div>
+                            </div>
+                            <div class="bg-darkbg/80 rounded-lg px-2 py-2 border border-gray-800">
+                                <div class="text-[9px] text-gray-500 mb-0.5">AVG CONF</div>
+                                <div id="dualConfB" class="text-sm font-bold text-gray-300">--%</div>
+                            </div>
+                        </div>
+                        <div id="dualModelBStatus" class="text-[10px] text-gray-500 font-mono">9.4M params · Accurate · Auto-download if needed</div>
+                    </div>
+                </div>
+
+                <!-- Agreement Bar + Conflict Log -->
+                <div class="border-t border-gray-800/80 px-4 py-3">
+                    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+                        <span class="text-[11px] text-gray-400 font-mono">Model Agreement</span>
+                        <span id="dualAgreementPct" class="text-xs font-bold text-emerald-400 font-mono">100%</span>
+                    </div>
+                    <div class="w-full bg-gray-800 rounded-full h-1.5 mb-3">
+                        <div id="dualAgreementBar" class="h-1.5 rounded-full bg-emerald-500 transition-all duration-500" style="width: 100%"></div>
+                    </div>
+
+                    <!-- Conflict Log -->
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fa-solid fa-triangle-exclamation text-yellow-400 text-[11px]"></i>
+                        <span class="text-[11px] font-semibold text-gray-300 font-mono">Routing Conflicts</span>
+                        <span id="dualConflictCount" class="text-[10px] bg-yellow-950 text-yellow-400 border border-yellow-700 px-1.5 py-0.5 rounded font-mono font-bold">0</span>
+                        <span class="text-[9px] text-gray-600 ml-auto font-mono">Items where Nano and Small chose different chute doors</span>
+                    </div>
+                    <div id="dualConflictLog" class="space-y-1 max-h-[120px] overflow-y-auto">
+                        <div class="text-[10px] text-gray-600 font-mono text-center py-3">
+                            No conflicts yet. Present items to camera to begin comparison.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer note -->
+                <div class="border-t border-gray-800/60 px-4 py-2 bg-darkbg/40">
+                    <p class="text-[10px] text-gray-600 font-mono">
+                        Conflicts = same object detected by both models, routed to different chute doors.
+                        YOLO11s (Small) is more accurate; YOLO11n (Nano) is ~2x faster.
+                        Safe rollback: if Model B fails, single-stream resumes automatically.
+                    </p>
                 </div>
             </div>
 
@@ -971,9 +1081,142 @@
                 // Classified Items List
                 renderClassifiedItems(data.recent_items);
 
+                // Update Dual Stream Panel when active
+                if (data.dual_stream_enabled !== undefined) {
+                    dualStreamActive = data.dual_stream_enabled;
+                    if (data.dual_stream_enabled && data.dual_stats) {
+                        updateDualPanel(data.dual_stats, data.dual_conflicts || []);
+                    }
+                }
+
             } catch (err) {
                 console.error('Dashboard poll error:', err);
             }
+        }
+
+
+        // ---------------------------------------------------------------
+        // DUAL-STREAM COMPARISON MODE
+        // ---------------------------------------------------------------
+        let dualStreamActive = false;
+
+        async function toggleDualStream() {
+            const btn = document.getElementById('btnDualCompare');
+            if (btn) { btn.disabled = true; btn.innerText = 'Loading...'; }
+
+            try {
+                const res = await fetch('/api/dual_stream/toggle', { method: 'POST' });
+                const data = await res.json();
+                dualStreamActive = data.dual_stream_enabled;
+                applyDualStreamUI(data.dual_stream_enabled, data.dual_stats);
+            } catch (e) {
+                console.error('Dual stream toggle error:', e);
+            } finally {
+                if (btn) { btn.disabled = false; }
+            }
+        }
+
+        function applyDualStreamUI(enabled, stats) {
+            const panel = document.getElementById('dualStreamPanel');
+            const btn   = document.getElementById('btnDualCompare');
+            const cam   = document.getElementById('camStreamImg');
+            const eng   = document.getElementById('engineLabel');
+
+            if (enabled) {
+                // Show panel, switch stream source, update button style
+                panel.classList.remove('hidden');
+                cam.src = '/video_dual';
+                if (btn) {
+                    btn.className = 'px-2.5 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 border border-violet-400 text-white text-xs font-semibold font-mono transition flex items-center gap-1.5 active:scale-95';
+                    btn.innerHTML = '<i class="fa-solid fa-code-branch text-[10px]"></i><span class="hidden sm:inline">Compare ON</span>';
+                }
+                if (eng) eng.innerText = 'NANO + SMALL';
+            } else {
+                // Hide panel, restore single stream
+                panel.classList.add('hidden');
+                cam.src = '/video_cam';
+                if (btn) {
+                    btn.className = 'px-2.5 py-1 rounded-lg bg-violet-950/70 hover:bg-violet-900 border border-violet-500/40 text-violet-300 text-xs font-semibold font-mono transition flex items-center gap-1.5 active:scale-95';
+                    btn.innerHTML = '<i class="fa-solid fa-code-branch text-[10px]"></i><span class="hidden sm:inline">Compare</span>';
+                }
+                if (eng) eng.innerText = 'YOLO11n';
+            }
+            if (stats) updateDualPanel(stats, []);
+        }
+
+        function updateDualPanel(stats, conflicts) {
+            if (!stats) return;
+
+            // Status badge
+            const badge = document.getElementById('dualModeStatusBadge');
+            if (badge) {
+                if (stats.enabled) {
+                    badge.innerText = 'ACTIVE';
+                    badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-emerald-900/80 text-emerald-300 border border-emerald-500/40';
+                } else {
+                    badge.innerText = 'OFFLINE';
+                    badge.className = 'text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-gray-800 text-gray-400 border border-gray-700';
+                }
+            }
+
+            // Model A stats
+            const ma = stats.model_a || {};
+            const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.innerText = val; };
+            setEl('dualMsA', (ma.inf_ms || 0).toFixed(0) + ' ms');
+            setEl('dualDetA', ma.detections ?? '--');
+            setEl('dualConfA', (ma.avg_conf_pct || 0).toFixed(0) + '%');
+
+            // Model B stats
+            const mb = stats.model_b || {};
+            setEl('dualMsB', (mb.inf_ms || 0).toFixed(0) + ' ms');
+            setEl('dualDetB', mb.detections ?? '--');
+            setEl('dualConfB', (mb.avg_conf_pct || 0).toFixed(0) + '%');
+
+            const bStatus = document.getElementById('dualModelBStatus');
+            if (bStatus) {
+                const st = mb.status || 'N/A';
+                if (st === 'ONLINE') {
+                    bStatus.innerHTML = `9.4M params · Status: <span class='text-emerald-400'>ONLINE (${mb.device || 'CPU'})</span>`;
+                } else if (st === 'NOT LOADED') {
+                    bStatus.innerHTML = `9.4M params · <span class='text-gray-500'>Will auto-download ~19 MB on first enable</span>`;
+                } else {
+                    bStatus.innerHTML = `9.4M params · Status: <span class='text-red-400'>${st}</span>`;
+                }
+            }
+
+            // Agreement bar
+            const agPct = stats.agreement_pct ?? 100;
+            setEl('dualAgreementPct', agPct.toFixed(0) + '%');
+            const bar = document.getElementById('dualAgreementBar');
+            if (bar) {
+                bar.style.width = agPct + '%';
+                bar.className = 'h-1.5 rounded-full transition-all duration-500 ' +
+                    (agPct >= 80 ? 'bg-emerald-500' : agPct >= 50 ? 'bg-yellow-500' : 'bg-red-500');
+            }
+
+            // Conflict count
+            setEl('dualConflictCount', stats.total_conflicts ?? 0);
+
+            // Conflict log
+            const log = document.getElementById('dualConflictLog');
+            if (!log) return;
+            const items = stats.conflict_log || [];
+            if (items.length === 0) {
+                log.innerHTML = '<div class="text-[10px] text-gray-600 font-mono text-center py-3">No conflicts yet. Present items to camera to begin comparison.</div>';
+                return;
+            }
+            const doorNames = { 1: 'Hazard D1', 2: 'E-Waste D2', 3: 'Paper D3', 4: 'Recyc D4', 5: 'Organic D5' };
+            log.innerHTML = items.map(c => {
+                const nameA = doorNames[c.door_a] || `Door ${c.door_a}`;
+                const nameB = doorNames[c.door_b] || `Door ${c.door_b}`;
+                return `<div class="flex items-center gap-2 text-[10px] font-mono bg-yellow-950/30 border border-yellow-700/40 rounded px-2.5 py-1.5">
+                    <i class="fa-solid fa-triangle-exclamation text-yellow-500 flex-shrink-0"></i>
+                    <span class="text-gray-200 font-bold flex-1 truncate">${c.display_name}</span>
+                    <span class="text-cyan-400">${nameA}</span>
+                    <span class="text-gray-500">vs</span>
+                    <span class="text-violet-400">${nameB}</span>
+                </div>`;
+            }).join('');
         }
 
         function renderClassifiedItems(items) {
