@@ -19,7 +19,7 @@ CANVAS_HEIGHT: int = 650
 TARGET_FPS: int = 60
 
 # Model Settings
-MODEL_NAME: str = "yolov8n.pt"
+MODEL_NAME: str = "yolo11n.pt"  # Latest Ultralytics YOLO11 Nano model
 CONFIDENCE_THRESHOLD: float = 0.40
 USE_HALF_PRECISION: bool = True  # FP16 inference for RTX 3050 Tensor Cores
 
