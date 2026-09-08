@@ -425,6 +425,9 @@
                 <!-- Preset Buttons -->
                 <div class="flex items-center flex-wrap gap-1.5">
                     <span class="text-gray-500 text-[11px] font-mono mr-1">PRESETS:</span>
+                    <button onclick="applyPreset('accessories_only')" class="px-2.5 py-1 rounded-lg bg-purple-950/70 hover:bg-purple-900 border border-purple-500/40 text-purple-300 font-medium transition active:scale-95 flex items-center gap-1.5" title="Detect all personal accessories, wearables, watches, glasses, wallets & bags">
+                        <i class="fa-solid fa-glasses text-[10px]"></i> Accessories
+                    </button>
                     <button onclick="applyPreset('stationery_only')" class="px-2.5 py-1 rounded-lg bg-amber-950/70 hover:bg-amber-900 border border-amber-500/40 text-amber-300 font-medium transition active:scale-95 flex items-center gap-1.5" title="Detect all stationary & desk collection items (books, scissors, backpack, electronics, clock)">
                         <i class="fa-solid fa-pen-ruler text-[10px]"></i> Stationery Items
                     </button>
@@ -445,7 +448,7 @@
                 <!-- Search Input -->
                 <div class="relative min-w-[220px]">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-500 text-xs"></i>
-                    <input type="text" id="filterSearchInput" oninput="onFilterSearch(this.value)" placeholder="Search objects (e.g. bottle, laptop)..."
+                    <input type="text" id="filterSearchInput" oninput="onFilterSearch(this.value)" placeholder="Search objects or accessories (e.g. watch, pen, glasses, wallet, notebook, bottle)..."
                         class="w-full bg-cardbg text-gray-200 border border-gray-700 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-cyan-400 font-mono transition">
                 </div>
             </div>
@@ -909,7 +912,11 @@
                 } else {
                     matchCat = (item.category === currentCategoryFilter || (currentCategoryFilter === 'PAPER' && item.category === 'PAPER & STATIONERY'));
                 }
-                const matchSearch = !currentSearchTerm || item.name.toLowerCase().includes(currentSearchTerm);
+                const matchSearch = !currentSearchTerm || 
+                    item.name.toLowerCase().includes(currentSearchTerm) ||
+                    (item.proper_name && item.proper_name.toLowerCase().includes(currentSearchTerm)) ||
+                    (item.aliases && item.aliases.some(a => a.toLowerCase().includes(currentSearchTerm))) ||
+                    (item.category && item.category.toLowerCase().includes(currentSearchTerm));
                 return matchCat && matchSearch;
             });
 
@@ -929,18 +936,26 @@
                     ? '<span class="px-1.5 py-0.5 rounded text-[8px] font-bold border border-cyan-500/40 bg-cyan-950/80 text-cyan-300 font-mono flex items-center gap-1"><i class="fa-regular fa-square"></i> FRAME ON</span>'
                     : '<span class="px-1.5 py-0.5 rounded text-[8px] font-bold border border-gray-700 bg-gray-800 text-gray-500 font-mono flex items-center gap-1"><i class="fa-regular fa-square"></i> NO FRAME</span>';
 
+                const displayName = item.proper_name || item.name;
+                const iconTag = item.icon ? `<i class="fa-solid ${item.icon} text-cyan-400 text-[11px] mr-1"></i>` : '';
+                const baseNote = (item.proper_name && item.proper_name.toLowerCase() !== item.name.toLowerCase())
+                    ? `<span class="text-[8px] text-gray-500 font-mono truncate hidden sm:inline">(${item.name})</span>`
+                    : '';
+
                 html += `
                 <div onclick="toggleSingleClass('${item.name}')"
                     class="${cardBg} border ${isChecked ? cStyle.border : 'border-gray-800'} hover:border-cyan-400/80 rounded-xl p-2.5 flex items-center justify-between cursor-pointer transition select-none shadow-sm">
-                    <div class="truncate mr-2">
-                        <div class="font-bold text-gray-200 capitalize truncate text-xs">
-                            ${item.name}
+                    <div class="truncate mr-2 flex-1">
+                        <div class="font-bold text-gray-100 truncate text-xs flex items-center gap-1">
+                            ${iconTag}
+                            <span class="truncate">${displayName}</span>
                         </div>
                         <div class="text-[9px] text-gray-400 truncate mt-0.5 flex items-center gap-1.5">
                             ${frameBadge}
                             <span class="px-1.5 py-0.2 rounded font-mono text-[8px] border ${cStyle.badge}">
                                 ${tagLabel}
                             </span>
+                            ${baseNote}
                         </div>
                     </div>
                     <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSingleClass('${item.name}')"
@@ -981,6 +996,7 @@
                 const tag = document.getElementById('activeFilterPresetTag');
                 if (tag) {
                     if (preset === 'waste_only') tag.innerText = 'Waste Only';
+                    else if (preset === 'accessories_only') tag.innerText = 'Accessories';
                     else if (preset === 'stationery_only') tag.innerText = 'Stationery Only';
                     else if (preset === 'hazard_only') tag.innerText = 'Hazard Only';
                     else if (preset === 'clear') tag.innerText = 'All Paused';

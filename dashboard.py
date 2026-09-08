@@ -256,9 +256,10 @@ def camera_worker():
                     cv2.line(frame, (x2, y2), (x2 - corner_len, y2), (255, 255, 255), 2)
                     cv2.line(frame, (x2, y2), (x2, y2 - corner_len), (255, 255, 255), 2)
 
-                    # Label banner
+                    # Label banner with proper descriptive name
                     conf_pct = int(item.confidence * 100)
-                    tag_text = f"[{cat_name}] {item.class_name.upper()} {conf_pct}%"
+                    display_label = item.display_name.upper() if getattr(item, 'display_name', None) else item.class_name.upper()
+                    tag_text = f"[{cat_name}] {display_label} {conf_pct}%"
                     (tw, th), _ = cv2.getTextSize(tag_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
 
                     cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 10, y1), (20, 20, 24), -1)
@@ -280,7 +281,8 @@ def camera_worker():
 
                 door_id = item.door_id
                 cat_name = item.category
-                detected_in_frame.append(item.class_name.title())
+                display_label = item.display_name if getattr(item, 'display_name', None) else item.class_name.title()
+                detected_in_frame.append(display_label)
 
                 # Trigger Simulation Doors & Feed Update (1.5s cooldown per item class)
                 last_seen = state.last_detection_timestamps.get(item.class_name, 0.0)
@@ -289,19 +291,19 @@ def camera_worker():
 
                     # Only actuate doors if mapped to an actual waste stream (Doors 1 - 5)
                     if door_id and door_id in DOORS:
-                        door_system.get_door(door_id).trigger_open(item.class_name)
+                        door_system.get_door(door_id).trigger_open(display_label)
                         logger.record_sorted_item(door_id)
 
                         # If Hazard -> Trigger Lockout & Log
                         if item.is_hazard:
-                            logger.log_hazard(item.class_name, item.confidence, item.bbox, door_id=1)
+                            logger.log_hazard(display_label, item.confidence, item.bbox, door_id=1)
                             with state.lock:
-                                state.last_hazard_class = item.class_name
+                                state.last_hazard_class = display_label
                                 state.last_hazard_conf = item.confidence
 
-                    # Add to Classified Objects Feed
+                    # Add to Classified Objects Feed with proper name
                     item_entry = {
-                        "name": item.class_name.title(),
+                        "name": display_label,
                         "category": cat_name,
                         "door_id": door_id if door_id else 0,
                         "confidence": round(item.confidence, 2),
@@ -507,6 +509,12 @@ def api_filter_preset(preset: str):
         detector.set_enabled_classes(list(set(waste_classes + extra_waste)))
     elif preset_lower == 'hazard_only':
         detector.set_enabled_classes(list(DOORS[1].target_classes))
+    elif preset_lower in ('accessories_only', 'accessories', 'accessory'):
+        # Detect all personal accessories, wearables, jewelry & carry gear
+        accessory_items = [
+            "clock", "toothbrush", "tie", "handbag", "backpack", "umbrella", "suitcase", "hair drier", "mouse"
+        ]
+        detector.set_enabled_classes(accessory_items)
     elif preset_lower in ('stationery_only', 'stationery', 'stationary_only', 'stationary'):
         # Detect all stationary & desk collection items (books, scissors, backpack, electronics, clock, pens)
         stationery_items = [

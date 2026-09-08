@@ -30,6 +30,7 @@ class DetectedItem:
     is_hazard: bool
     center_pos: Tuple[int, int]
     has_frame: bool = True  # Whether to display the rectangular frame and HUD labels
+    display_name: str = ""  # Refined proper label name (e.g. Pen / Marker, Wrist Watch)
 
 
 @dataclass
@@ -44,6 +45,173 @@ class DetectionResult:
 # -----------------------------------------------------------------------------
 # Object Collections Taxonomy for Frame Visibility Toggles
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Fine-Grained Object Disambiguation & Proper Label Dictionary
+# Refines coarse COCO classes into precise everyday accessory and stationery names
+# -----------------------------------------------------------------------------
+REFINED_OBJECT_INFO: Dict[str, dict] = {
+    "toothbrush": {
+        "proper_name": "Pen / Marker / Pencil",
+        "category": "STATIONERY",
+        "door_id": 3,
+        "aliases": ["pen", "pencil", "marker", "stylus", "highlighter", "ballpoint", "toothbrush"],
+        "description": "Pens, pencils, markers and slender writing tools",
+        "icon": "fa-pen"
+    },
+    "clock": {
+        "proper_name": "Wrist Watch / Smartwatch",
+        "category": "ACCESSORIES",
+        "door_id": 2,
+        "aliases": ["watch", "wrist watch", "smartwatch", "fitness tracker", "clock", "timer"],
+        "description": "Wrist watches, smartwatches, timers and desk clocks",
+        "icon": "fa-clock"
+    },
+    "tie": {
+        "proper_name": "Eyeglasses / Shades / Lanyard",
+        "category": "ACCESSORIES",
+        "door_id": None,
+        "aliases": ["glasses", "eyeglasses", "sunglasses", "spectacles", "shades", "lanyard", "tie", "necktie"],
+        "description": "Eyewear, sunglasses, reading glasses, lanyards and ties",
+        "icon": "fa-glasses"
+    },
+    "handbag": {
+        "proper_name": "Wallet / Purse / Pouch",
+        "category": "ACCESSORIES",
+        "door_id": None,
+        "aliases": ["wallet", "purse", "pouch", "card holder", "clutch", "handbag", "coin purse"],
+        "description": "Wallets, coin purses, card holders and small pouches",
+        "icon": "fa-wallet"
+    },
+    "backpack": {
+        "proper_name": "Backpack / School Bag",
+        "category": "ACCESSORIES",
+        "door_id": 3,
+        "aliases": ["backpack", "bag", "school bag", "rucksack", "knapsack", "daypack"],
+        "description": "School bags, daypacks, rucksacks and carry bags",
+        "icon": "fa-backpack"
+    },
+    "book": {
+        "proper_name": "Notebook / Diary / Book",
+        "category": "PAPER & STATIONERY",
+        "door_id": 3,
+        "aliases": ["notebook", "notepad", "diary", "journal", "book", "textbook", "novel", "pad"],
+        "description": "Notebooks, journals, spiral pads, textbooks and documents",
+        "icon": "fa-book"
+    },
+    "scissors": {
+        "proper_name": "Scissors / Craft Shears",
+        "category": "HAZARD",
+        "door_id": 1,
+        "aliases": ["scissors", "shears", "clippers", "paper cutter", "craft scissors"],
+        "description": "Cutting shears, craft scissors and paper cutters",
+        "icon": "fa-scissors"
+    },
+    "knife": {
+        "proper_name": "Utility Knife / Box Cutter",
+        "category": "HAZARD",
+        "door_id": 1,
+        "aliases": ["knife", "box cutter", "utility knife", "blade", "cutter", "pocket knife", "scalpel"],
+        "description": "Box cutters, craft blades, utility knives and sharps",
+        "icon": "fa-utensils"
+    },
+    "bottle": {
+        "proper_name": "Water Bottle / Flask / Can",
+        "category": "HAZARD",
+        "door_id": 1,
+        "aliases": ["bottle", "water bottle", "thermos", "flask", "beverage bottle", "tumbler", "soda can"],
+        "description": "Reusable water bottles, metal flasks, glass bottles and drink containers",
+        "icon": "fa-bottle-water"
+    },
+    "cup": {
+        "proper_name": "Coffee Mug / Tea Cup",
+        "category": "RECYCLABLE",
+        "door_id": 4,
+        "aliases": ["cup", "mug", "coffee mug", "tea cup", "drinkware", "tumbler", "glass"],
+        "description": "Coffee mugs, tea cups, paper cups and drinkware",
+        "icon": "fa-mug-hot"
+    },
+    "cell phone": {
+        "proper_name": "Smartphone / Mobile",
+        "category": "E-WASTE",
+        "door_id": 2,
+        "aliases": ["cell phone", "phone", "smartphone", "mobile", "iphone", "android", "device"],
+        "description": "Smartphones, cellular phones and handheld mobile devices",
+        "icon": "fa-mobile-screen"
+    },
+    "laptop": {
+        "proper_name": "Laptop / Notebook PC",
+        "category": "E-WASTE",
+        "door_id": 2,
+        "aliases": ["laptop", "computer", "notebook pc", "macbook", "pc", "chromebook"],
+        "description": "Laptops, notebook computers and portable PCs",
+        "icon": "fa-laptop"
+    },
+    "mouse": {
+        "proper_name": "Mouse / Charger / Earbuds",
+        "category": "E-WASTE",
+        "door_id": 2,
+        "aliases": ["mouse", "computer mouse", "charger", "earbuds", "airpods", "adapter", "usb"],
+        "description": "Computer mice, wireless earbuds cases, charging bricks and adapters",
+        "icon": "fa-mouse"
+    },
+    "keyboard": {
+        "proper_name": "Keyboard / Keypad",
+        "category": "E-WASTE",
+        "door_id": 2,
+        "aliases": ["keyboard", "keypad", "mechanical keyboard", "typing keyboard"],
+        "description": "Computer keyboards, number pads and input boards",
+        "icon": "fa-keyboard"
+    },
+    "remote": {
+        "proper_name": "Stapler / Remote / Calculator",
+        "category": "E-WASTE",
+        "door_id": 2,
+        "aliases": ["remote", "stapler", "calculator", "controller", "tv remote"],
+        "description": "Remote controls, desktop staplers and calculators",
+        "icon": "fa-calculator"
+    },
+    "umbrella": {
+        "proper_name": "Umbrella / Rain Gear",
+        "category": "ACCESSORIES",
+        "door_id": None,
+        "aliases": ["umbrella", "parasol", "rain gear"],
+        "description": "Folding umbrellas, rain umbrellas and parasols",
+        "icon": "fa-umbrella"
+    },
+    "suitcase": {
+        "proper_name": "Suitcase / Luggage",
+        "category": "ACCESSORIES",
+        "door_id": None,
+        "aliases": ["suitcase", "luggage", "trolley", "briefcase", "travel bag"],
+        "description": "Suitcases, trolley bags, briefcases and travel luggage",
+        "icon": "fa-suitcase-rolling"
+    },
+    "hair drier": {
+        "proper_name": "Hair Drier / Tool",
+        "category": "ACCESSORIES",
+        "door_id": 2,
+        "aliases": ["hair drier", "hairdryer", "blower", "styling tool"],
+        "description": "Electric hair driers, blowers and styling appliances",
+        "icon": "fa-wind"
+    },
+    "wine glass": {
+        "proper_name": "Wine Glass / Stemware",
+        "category": "RECYCLABLE",
+        "door_id": 4,
+        "aliases": ["wine glass", "goblet", "stemware", "glass cup"],
+        "description": "Wine glasses, goblets and glassware",
+        "icon": "fa-wine-glass"
+    },
+    "bowl": {
+        "proper_name": "Bowl / Tableware",
+        "category": "RECYCLABLE",
+        "door_id": 4,
+        "aliases": ["bowl", "salad bowl", "soup bowl", "dish"],
+        "description": "Bowls, food dishes and reusable tableware",
+        "icon": "fa-bowl-food"
+    }
+}
+
 OBJECT_COLLECTIONS: Dict[str, dict] = {
     "stationery": {
         "id": "stationery",
@@ -111,11 +279,11 @@ OBJECT_COLLECTIONS: Dict[str, dict] = {
     },
     "accessories": {
         "id": "accessories",
-        "name": "Accessories & Bags",
-        "icon": "fa-briefcase",
+        "name": "Personal Accessories & Wearables",
+        "icon": "fa-glasses",
         "color": "purple",
-        "description": "Backpacks, handbags, ties & luggage",
-        "classes": ["backpack", "umbrella", "handbag", "tie", "suitcase", "hair drier"]
+        "description": "Watches, glasses, wallets, jewelry, bags & accessories",
+        "classes": ["backpack", "umbrella", "handbag", "tie", "suitcase", "hair drier", "clock", "toothbrush", "mouse"]
     },
     "vehicles": {
         "id": "vehicles",
@@ -241,6 +409,100 @@ class WasteDetector:
 
         return None, "NON-WASTE", (140, 145, 155), False
 
+    def refine_label(self, class_name: str, bbox: Tuple[int, int, int, int], frame_w: int = 640, frame_h: int = 480) -> Tuple[str, str, Optional[int]]:
+        """
+        Dynamically refines a generic COCO class name into a proper descriptive label name
+        using bounding box aspect ratio, normalized area, and accessory heuristics.
+        Returns: (proper_display_name, category, door_id)
+        """
+        raw_lower = class_name.lower().strip()
+        x1, y1, x2, y2 = bbox
+        w = max(1, x2 - x1)
+        h = max(1, y2 - y1)
+        aspect_ratio = max(w, h) / max(1, min(w, h))
+        area_ratio = (w * h) / (frame_w * frame_h)
+
+        # 1. Toothbrush -> Pen / Pencil / Marker
+        if raw_lower == "toothbrush":
+            if aspect_ratio >= 2.5:
+                return "Pen / Marker", "STATIONERY", 3
+            return "Pen / Stylus", "STATIONERY", 3
+
+        # 2. Clock -> Wrist Watch / Smartwatch vs Wall/Desk Clock
+        if raw_lower == "clock":
+            if area_ratio < 0.08 or max(w, h) < 180:
+                return "Wrist Watch", "ACCESSORIES", None
+            return "Desk / Wall Clock", "ACCESSORIES", None
+
+        # 3. Handbag -> Wallet / Card Case vs Handbag / Tote
+        if raw_lower == "handbag":
+            if area_ratio < 0.09 or max(w, h) < 190:
+                return "Wallet / Pouch", "ACCESSORIES", None
+            return "Handbag / Purse", "ACCESSORIES", None
+
+        # 4. Tie -> Eyeglasses / Spectacles vs Necktie / Lanyard
+        if raw_lower == "tie":
+            if w > h or aspect_ratio < 2.4:
+                return "Eyeglasses / Shades", "ACCESSORIES", None
+            return "Necktie / Lanyard", "ACCESSORIES", None
+
+        # 5. Book -> Notebook / Diary vs Hardcover Book
+        if raw_lower == "book":
+            if aspect_ratio > 1.3:
+                return "Notebook / Diary", "PAPER & STATIONERY", 3
+            return "Book / Document", "PAPER & STATIONERY", 3
+
+        # 6. Remote -> Stapler / Remote / Calculator
+        if raw_lower == "remote":
+            if aspect_ratio > 2.0 and area_ratio < 0.08:
+                return "Stapler / Remote", "STATIONERY", 3
+            return "Remote / Controller", "E-WASTE", 2
+
+        # 7. Mouse -> Mouse / Charger / Earbuds Case
+        if raw_lower == "mouse":
+            if area_ratio < 0.04:
+                return "Earbuds / Charger", "ACCESSORIES", 2
+            return "Computer Mouse", "E-WASTE", 2
+
+        # 8. Cell Phone -> Smartphone
+        if raw_lower == "cell phone":
+            return "Smartphone", "E-WASTE", 2
+
+        # 9. Bottle -> Water Bottle / Flask
+        if raw_lower == "bottle":
+            if aspect_ratio > 2.0:
+                return "Water Bottle / Flask", "HAZARD", 1
+            return "Bottle / Beverage Can", "HAZARD", 1
+
+        # 10. Cup -> Coffee Mug / Drinkware
+        if raw_lower == "cup":
+            return "Coffee Mug / Cup", "RECYCLABLE", 4
+
+        # 11. Knife -> Utility Knife / Box Cutter
+        if raw_lower == "knife":
+            return "Box Cutter / Knife", "HAZARD", 1
+
+        # 12. Scissors -> Scissors / Shears
+        if raw_lower == "scissors":
+            return "Scissors / Shears", "STATIONERY", 3
+
+        # 13. Backpack -> Backpack / School Bag
+        if raw_lower == "backpack":
+            return "Backpack / Daypack", "ACCESSORIES", 3
+
+        # 14. Laptop -> Laptop PC
+        if raw_lower == "laptop":
+            return "Laptop Computer", "E-WASTE", 2
+
+        # Check pre-defined refined dictionary
+        if raw_lower in REFINED_OBJECT_INFO:
+            info = REFINED_OBJECT_INFO[raw_lower]
+            return info["proper_name"], info["category"], info["door_id"]
+
+        # Default fallback
+        door_id, cat, _, _ = self.get_category_info(raw_lower)
+        return class_name.title(), cat, door_id
+
     def classify_to_door(self, class_name: str) -> int:
         """Map object class name to assigned Door ID (1 to 5). Fallback to 4 for backwards compatibility."""
         door_id, _, _, _ = self.get_category_info(class_name)
@@ -265,14 +527,24 @@ class WasteDetector:
             name_lower = name.lower().strip()
             door_id, cat, color, is_haz = self.get_category_info(name_lower)
             is_enabled = True if self.enabled_classes is None else (name_lower in self.enabled_classes)
+            # Check refined dictionary for proper naming & aliases
+            refined = REFINED_OBJECT_INFO.get(name_lower, {})
+            proper_name = refined.get("proper_name", name.title())
+            aliases = refined.get("aliases", [name_lower, name.title()])
+            icon = refined.get("icon", "fa-tag")
+            display_cat = refined.get("category", cat)
+
             catalog.append({
                 "id": int(cls_id),
                 "name": name,
+                "proper_name": proper_name,
+                "aliases": aliases,
+                "icon": icon,
                 "door_id": door_id,
-                "category": cat,
+                "category": display_cat,
                 "is_hazard": is_haz,
                 "is_waste": (door_id is not None),
-                "is_stationery": (name_lower in STATIONERY_CLASSES),
+                "is_stationery": (name_lower in STATIONERY_CLASSES or "stationery" in [cid for cid, cdata in OBJECT_COLLECTIONS.items() if name_lower in cdata["classes"]]),
                 "is_enabled": is_enabled,
                 "has_frame": is_enabled,
                 "collections": [cid for cid, cdata in OBJECT_COLLECTIONS.items() if name_lower in cdata["classes"]]
@@ -380,8 +652,16 @@ class WasteDetector:
                     x2 = int(xyxy[2]) + offset_x
                     y2 = int(xyxy[3]) + offset_y
 
+                    # Refine generic COCO label to proper descriptive accessory/item name
+                    proper_name, ref_cat, ref_door = self.refine_label(name_lower, (x1, y1, x2, y2))
+
                     # Determine Door & Category
                     door_id, category, color_bgr, is_hazard = self.get_category_info(name_lower)
+                    if ref_cat:
+                        category = ref_cat
+                    if ref_door is not None:
+                        door_id = ref_door
+
                     if is_hazard and has_frame:
                         has_hazard = True
 
@@ -397,7 +677,8 @@ class WasteDetector:
                         color_bgr=color_bgr,
                         is_hazard=is_hazard,
                         center_pos=(center_x, center_y),
-                        has_frame=has_frame
+                        has_frame=has_frame,
+                        display_name=proper_name
                     ))
 
         except Exception as e:
