@@ -155,15 +155,31 @@
                         </span>
                     </div>
 
-                    <!-- CAMERA SOURCE SELECTOR + ACTIONS -->
-                    <div class="flex items-center gap-1.5 font-mono text-xs">
-                        <label for="cameraSelectDropdown" class="text-gray-400 text-[11px] hidden sm:inline">SOURCE:</label>
-                        <select id="cameraSelectDropdown" onchange="onCameraDropdownChange(this.value)"
-                            class="bg-darkbg text-gray-200 border border-gray-700 hover:border-cyan-400 focus:border-cyan-400 rounded-lg px-2.5 py-1 text-xs font-mono cursor-pointer focus:outline-none transition shadow-sm">
-                            <option value="1">Camo (Phone HD 720p)</option>
-                            <option value="0">HD Webcam (Laptop Integrated)</option>
-                            <option value="2">OBS Virtual Camera</option>
-                        </select>
+                    <!-- CAMERA CONTROLS: TOGGLE RECTANGLE LABELS + SOURCE + ACTIONS -->
+                    <div class="flex items-center gap-2 font-mono text-xs flex-wrap">
+                        <!-- TOGGLE SWITCH FOR RECTANGLE LABELS -->
+                        <div class="flex items-center gap-2 bg-darkbg/90 px-2.5 py-1 rounded-lg border border-gray-700/80 shadow-inner" title="Toggle bounding box rectangle and label tags on camera stream">
+                            <span class="text-[11px] text-gray-300 font-sans font-medium flex items-center gap-1.5 select-none">
+                                <i class="fa-regular fa-square text-cyan-400 text-xs"></i>
+                                <span class="hidden sm:inline">Rectangle</span> Labels:
+                            </span>
+                            <label class="relative inline-flex items-center cursor-pointer select-none">
+                                <input type="checkbox" id="toggleRectangleLabelSwitch" checked onchange="toggleRectangleLabels(this.checked)" class="sr-only peer">
+                                <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
+                            </label>
+                            <span id="rectLabelStatus" class="text-[10px] text-cyan-400 font-mono font-bold select-none">ON</span>
+                        </div>
+
+                        <!-- CAMERA SOURCE SELECTOR -->
+                        <div class="flex items-center gap-1">
+                            <label for="cameraSelectDropdown" class="text-gray-400 text-[11px] hidden md:inline">SOURCE:</label>
+                            <select id="cameraSelectDropdown" onchange="onCameraDropdownChange(this.value)"
+                                class="bg-darkbg text-gray-200 border border-gray-700 hover:border-cyan-400 focus:border-cyan-400 rounded-lg px-2.5 py-1 text-xs font-mono cursor-pointer focus:outline-none transition shadow-sm">
+                                <option value="1">Camo (Phone HD 720p)</option>
+                                <option value="0">HD Webcam (Laptop Integrated)</option>
+                                <option value="2">OBS Virtual Camera</option>
+                            </select>
+                        </div>
                         <button onclick="rescanCameras()" title="Rescan camera devices on this PC"
                             class="px-2 py-1 bg-gray-800 hover:bg-gray-700 active:scale-95 text-cyan-400 hover:text-cyan-300 border border-gray-700 rounded-lg transition" aria-label="Rescan cameras">
                             <i class="fa-solid fa-arrows-rotate text-[11px]" id="rescanIcon"></i>
@@ -259,7 +275,7 @@
                         <div class="text-[9px] text-gray-500 truncate mt-1">Last: <span id="doorLast-2" class="text-gray-300 font-mono">None</span></div>
                     </div>
 
-                    <!-- DOOR 3: PAPER -->
+                    <!-- DOOR 3: PAPER & STATIONERY -->
                     <div id="doorCard-3" class="bg-cardbg border border-yellow-500/40 hover:border-yellow-400 rounded-xl p-3 transition-all flex flex-col justify-between shadow-sm">
                         <div>
                             <div class="flex items-center justify-between mb-1.5">
@@ -267,9 +283,9 @@
                                 <span id="doorBadge-3" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">SHUT</span>
                             </div>
                             <div class="text-xs font-bold text-yellow-400 flex items-center gap-1.5 mb-0.5">
-                                <i class="fa-solid fa-box-archive"></i> PAPER
+                                <i class="fa-solid fa-book-open"></i> PAPER &amp; STATIONERY
                             </div>
-                            <div class="text-[10px] text-gray-400 truncate">Book, Cardboard, Box</div>
+                            <div class="text-[10px] text-gray-400 truncate">Books, Scissors, Paper, Bags</div>
                         </div>
                         <div class="pt-2 mt-2 border-t border-gray-800/80 flex items-center justify-between">
                             <div>
@@ -406,6 +422,9 @@
                 <!-- Preset Buttons -->
                 <div class="flex items-center flex-wrap gap-1.5">
                     <span class="text-gray-500 text-[11px] font-mono mr-1">PRESETS:</span>
+                    <button onclick="applyPreset('stationery_only')" class="px-2.5 py-1 rounded-lg bg-amber-950/70 hover:bg-amber-900 border border-amber-500/40 text-amber-300 font-medium transition active:scale-95 flex items-center gap-1.5" title="Detect all stationary & desk collection items (books, scissors, backpack, electronics, clock)">
+                        <i class="fa-solid fa-pen-ruler text-[10px]"></i> Stationery Items
+                    </button>
                     <button onclick="applyPreset('waste_only')" class="px-2.5 py-1 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-medium transition active:scale-95 flex items-center gap-1.5">
                         <i class="fa-solid fa-recycle text-[10px]"></i> Waste Only (Recommended)
                     </button>
@@ -432,6 +451,7 @@
             <div class="px-6 py-2 bg-panelbg border-b border-gray-800 flex flex-wrap items-center gap-2 text-[11px] font-mono">
                 <span class="text-gray-500">FILTER CATEGORY:</span>
                 <button onclick="filterByCategory('ALL')" id="catBtn-ALL" class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold transition">All</button>
+                <button onclick="filterByCategory('STATIONERY')" id="catBtn-STATIONERY" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-amber-400 border border-gray-700 hover:border-amber-500/40 transition">📐 Stationery</button>
                 <button onclick="filterByCategory('HAZARD')" id="catBtn-HAZARD" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-red-400 border border-gray-700 hover:border-red-500/40 transition">🔴 Hazard</button>
                 <button onclick="filterByCategory('E-WASTE')" id="catBtn-E-WASTE" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-cyan-400 border border-gray-700 hover:border-cyan-500/40 transition">🟣 E-Waste</button>
                 <button onclick="filterByCategory('PAPER')" id="catBtn-PAPER" class="px-2.5 py-0.5 rounded-full bg-gray-800 text-yellow-400 border border-gray-700 hover:border-yellow-500/40 transition">🟡 Paper</button>
@@ -446,10 +466,16 @@
             </div>
 
             <!-- MODAL FOOTER -->
-            <div class="px-6 py-3.5 bg-cardbg border-t border-gray-800 flex items-center justify-between">
-                <span class="text-xs text-gray-400 font-mono" id="modalStatusText">
-                    80 objects configured
-                </span>
+            <div class="px-6 py-3.5 bg-cardbg border-t border-gray-800 flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-gray-400 font-mono" id="modalStatusText">
+                        80 objects configured
+                    </span>
+                    <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-300 select-none">
+                        <input type="checkbox" id="modalToggleRectangleLabelSwitch" checked onchange="toggleRectangleLabels(this.checked)" class="w-4 h-4 rounded text-cyan-500 bg-gray-800 border-gray-700 focus:ring-0 cursor-pointer">
+                        <span>Show Rectangle Labels</span>
+                    </label>
+                </div>
                 <button onclick="closeFilterModal()" class="px-5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-darkbg font-bold text-xs transition shadow-lg shadow-cyan-900/30">
                     Done
                 </button>
@@ -543,6 +569,11 @@
                             card.className = `bg-cardbg border ${borderColors[d] || 'border-gray-700'} rounded-xl p-3 transition-all flex flex-col justify-between shadow-sm`;
                         }
                     }
+                }
+
+                // Sync Rectangle Labels toggle switch
+                if (data.show_rectangle_labels !== undefined) {
+                    updateRectangleLabelUI(data.show_rectangle_labels);
                 }
 
                 // Classified Items List
@@ -705,9 +736,35 @@
             renderObjectChips();
         }
 
+        async function toggleRectangleLabels(show) {
+            try {
+                const res = await fetch('/api/toggle_rectangle_labels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ show: show })
+                });
+                const data = await res.json();
+                updateRectangleLabelUI(data.show_rectangle_labels);
+            } catch (err) {
+                console.error('Error toggling rectangle labels:', err);
+            }
+        }
+
+        function updateRectangleLabelUI(show) {
+            const sw = document.getElementById('toggleRectangleLabelSwitch');
+            if (sw && sw.checked !== show) sw.checked = show;
+            const modalSw = document.getElementById('modalToggleRectangleLabelSwitch');
+            if (modalSw && modalSw.checked !== show) modalSw.checked = show;
+            const status = document.getElementById('rectLabelStatus');
+            if (status) {
+                status.innerText = show ? 'ON' : 'OFF';
+                status.className = show ? 'text-[10px] text-cyan-400 font-mono font-bold select-none' : 'text-[10px] text-gray-500 font-mono font-bold select-none';
+            }
+        }
+
         function filterByCategory(cat) {
             currentCategoryFilter = cat;
-            const cats = ['ALL', 'HAZARD', 'E-WASTE', 'PAPER', 'RECYCLABLE', 'ORGANIC', 'NON-WASTE'];
+            const cats = ['ALL', 'STATIONERY', 'HAZARD', 'E-WASTE', 'PAPER', 'RECYCLABLE', 'ORGANIC', 'NON-WASTE'];
             cats.forEach(c => {
                 const btn = document.getElementById(`catBtn-${c}`);
                 if (btn) {
@@ -729,13 +786,21 @@
                 'HAZARD': { border: 'border-red-500/40', badge: 'bg-red-950/80 text-red-300 border-red-500/30' },
                 'E-WASTE': { border: 'border-cyan-500/40', badge: 'bg-cyan-950/80 text-cyan-300 border-cyan-500/30' },
                 'PAPER': { border: 'border-yellow-500/40', badge: 'bg-yellow-950/80 text-yellow-300 border-yellow-500/30' },
+                'PAPER & STATIONERY': { border: 'border-yellow-500/40', badge: 'bg-yellow-950/80 text-yellow-300 border-yellow-500/30' },
                 'RECYCLABLE': { border: 'border-emerald-500/40', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/30' },
                 'ORGANIC': { border: 'border-orange-500/40', badge: 'bg-orange-950/80 text-orange-300 border-orange-500/30' },
                 'NON-WASTE': { border: 'border-gray-700', badge: 'bg-gray-800 text-gray-400 border-gray-600' }
             };
 
             let filtered = filterCatalog.filter(item => {
-                const matchCat = (currentCategoryFilter === 'ALL') || (item.category === currentCategoryFilter);
+                let matchCat = false;
+                if (currentCategoryFilter === 'ALL') {
+                    matchCat = true;
+                } else if (currentCategoryFilter === 'STATIONERY') {
+                    matchCat = !!item.is_stationery;
+                } else {
+                    matchCat = (item.category === currentCategoryFilter || (currentCategoryFilter === 'PAPER' && item.category === 'PAPER & STATIONERY'));
+                }
                 const matchSearch = !currentSearchTerm || item.name.toLowerCase().includes(currentSearchTerm);
                 return matchCat && matchSearch;
             });
@@ -804,6 +869,7 @@
                 const tag = document.getElementById('activeFilterPresetTag');
                 if (tag) {
                     if (preset === 'waste_only') tag.innerText = 'Waste Only';
+                    else if (preset === 'stationery_only') tag.innerText = 'Stationery Only';
                     else if (preset === 'hazard_only') tag.innerText = 'Hazard Only';
                     else if (preset === 'clear') tag.innerText = 'All Paused';
                     else tag.innerText = 'All Objects';

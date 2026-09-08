@@ -35,7 +35,7 @@ DOOR_2_EWASTE: Set[str] = {
 }
 
 DOOR_3_PAPER: Set[str] = {
-    "book", "newspaper", "paper", "cardboard", "box"
+    "book", "newspaper", "paper", "cardboard", "box", "notebook", "stationery", "binder", "envelope", "backpack"
 }
 
 DOOR_4_RECYCLABLE: Set[str] = {
@@ -76,10 +76,10 @@ DOORS: Dict[int, DoorInfo] = {
     3: DoorInfo(
         id=3,
         name="DOOR 3",
-        category="PAPER",
+        category="PAPER & STATIONERY",
         color_bgr=(0, 220, 255),    # Yellow-Amber
         target_classes=DOOR_3_PAPER,
-        description="Dry Paper, Cardboard & Fiber"
+        description="Paper, Books, Stationery & Fiber"
     ),
     4: DoorInfo(
         id=4,

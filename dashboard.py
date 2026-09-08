@@ -109,6 +109,7 @@ class DashboardState:
         self.recent_items = deque(maxlen=35)  # Chronological list of classified items
         self.last_detection_timestamps = {}   # Cooldown per class to avoid spamming feed
         self.conf_threshold: float = CONFIDENCE_THRESHOLD
+        self.show_rectangle_labels: bool = True  # Toggle for drawing bounding box rectangles and labels
 
 state = DashboardState()
 
@@ -232,44 +233,49 @@ def camera_worker():
             det_result = detector.detect(frame)
             inf_ms = det_result.inference_time_ms
 
-            # 2. Draw Bounding Boxes and Classification Labels
+            # 2. Draw Bounding Boxes and Classification Labels (if enabled)
+            if state.show_rectangle_labels:
+                for item in det_result.items:
+                    x1, y1, x2, y2 = item.bbox
+                    color = item.color_bgr
+                    door_id = item.door_id
+                    cat_name = item.category
+
+                    # Bounding box
+                    box_thickness = 3 if item.is_hazard else 2
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, box_thickness)
+
+                    # Corner brackets for HUD aesthetic
+                    corner_len = 16
+                    cv2.line(frame, (x1, y1), (x1 + corner_len, y1), (255, 255, 255), 2)
+                    cv2.line(frame, (x1, y1), (x1, y1 + corner_len), (255, 255, 255), 2)
+                    cv2.line(frame, (x2, y2), (x2 - corner_len, y2), (255, 255, 255), 2)
+                    cv2.line(frame, (x2, y2), (x2, y2 - corner_len), (255, 255, 255), 2)
+
+                    # Label banner
+                    conf_pct = int(item.confidence * 100)
+                    tag_text = f"[{cat_name}] {item.class_name.upper()} {conf_pct}%"
+                    (tw, th), _ = cv2.getTextSize(tag_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+
+                    cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 10, y1), (20, 20, 24), -1)
+                    cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 10, y1), color, 1)
+                    cv2.putText(frame, tag_text, (x1 + 5, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+
+                    # Door routing hint under box
+                    if door_id and door_id in DOORS:
+                        dest_text = f"ROUTE -> DOOR {door_id} ({DOORS[door_id].category})"
+                    else:
+                        dest_text = "NON-WASTE OBJECT"
+                    cv2.putText(frame, dest_text, (x1 + 2, min(WEBCAM_HEIGHT - 6, y2 + 16)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1)
+
+            # 3. Process items for door actuation, feeds, and HUD
             for item in det_result.items:
-                x1, y1, x2, y2 = item.bbox
-                color = item.color_bgr
                 door_id = item.door_id
                 cat_name = item.category
-
-                # Bounding box
-                box_thickness = 3 if item.is_hazard else 2
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, box_thickness)
-
-                # Corner brackets for HUD aesthetic
-                corner_len = 16
-                cv2.line(frame, (x1, y1), (x1 + corner_len, y1), (255, 255, 255), 2)
-                cv2.line(frame, (x1, y1), (x1, y1 + corner_len), (255, 255, 255), 2)
-                cv2.line(frame, (x2, y2), (x2 - corner_len, y2), (255, 255, 255), 2)
-                cv2.line(frame, (x2, y2), (x2, y2 - corner_len), (255, 255, 255), 2)
-
-                # Label banner
-                conf_pct = int(item.confidence * 100)
-                tag_text = f"[{cat_name}] {item.class_name.upper()} {conf_pct}%"
-                (tw, th), _ = cv2.getTextSize(tag_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-
-                cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 10, y1), (20, 20, 24), -1)
-                cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 10, y1), color, 1)
-                cv2.putText(frame, tag_text, (x1 + 5, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
-
-                # Door routing hint under box
-                if door_id and door_id in DOORS:
-                    dest_text = f"ROUTE -> DOOR {door_id} ({DOORS[door_id].category})"
-                else:
-                    dest_text = "NON-WASTE OBJECT"
-                cv2.putText(frame, dest_text, (x1 + 2, min(WEBCAM_HEIGHT - 6, y2 + 16)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1)
-
                 detected_in_frame.append(item.class_name.title())
 
-                # 3. Trigger Simulation Doors & Feed Update (1.5s cooldown per item class)
+                # Trigger Simulation Doors & Feed Update (1.5s cooldown per item class)
                 last_seen = state.last_detection_timestamps.get(item.class_name, 0.0)
                 if (current_time - last_seen) > 1.5:
                     state.last_detection_timestamps[item.class_name] = current_time
@@ -389,7 +395,8 @@ def api_state():
             "current_detected_label": state.current_detected_label,
             "total_sorted": logger.total_scanned_count,
             "doors": doors_data,
-            "recent_items": list(state.recent_items)
+            "recent_items": list(state.recent_items),
+            "show_rectangle_labels": state.show_rectangle_labels
         })
 
 
@@ -458,6 +465,12 @@ def api_filter_preset(preset: str):
         detector.set_enabled_classes(list(set(waste_classes + extra_waste)))
     elif preset_lower == 'hazard_only':
         detector.set_enabled_classes(list(DOORS[1].target_classes))
+    elif preset_lower in ('stationery_only', 'stationery', 'stationary_only', 'stationary'):
+        # Detect all stationary & desk collection items (books, scissors, backpack, electronics, clock, pens)
+        stationery_items = [
+            "book", "scissors", "backpack", "clock", "cell phone", "laptop", "mouse", "keyboard", "toothbrush"
+        ]
+        detector.set_enabled_classes(stationery_items)
     elif preset_lower == 'clear':
         detector.set_enabled_classes([])
     else:
@@ -470,6 +483,28 @@ def api_filter_preset(preset: str):
         "preset": preset_lower,
         "enabled_count": enabled_count,
         "total_count": len(catalog)
+    })
+
+
+@app.route('/api/toggle_rectangle_labels', methods=['GET', 'POST'])
+def api_toggle_rectangle_labels():
+    """Toggle or set rectangle labels and bounding boxes visibility on camera feed."""
+    if request.method == 'POST':
+        data = request.get_json(force=True, silent=True) or {}
+        with state.lock:
+            if 'show' in data:
+                state.show_rectangle_labels = bool(data['show'])
+            else:
+                state.show_rectangle_labels = not state.show_rectangle_labels
+    elif request.method == 'GET':
+        show_param = request.args.get('show', None)
+        if show_param is not None:
+            with state.lock:
+                state.show_rectangle_labels = (show_param.lower() in ('true', '1', 'yes'))
+
+    return jsonify({
+        "success": True,
+        "show_rectangle_labels": state.show_rectangle_labels
     })
 
 

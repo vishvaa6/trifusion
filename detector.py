@@ -40,6 +40,12 @@ class DetectionResult:
     gpu_memory_used_mb: float = 0.0
 
 
+# Stationery and Office Desk items recognized in COCO
+STATIONERY_CLASSES: Set[str] = {
+    "book", "scissors", "backpack", "clock", "cell phone", "laptop", "mouse", "keyboard", "toothbrush"
+}
+
+
 class WasteDetector:
     """YOLOv8 Edge Inference Engine with GPU optimization and waste stream routing."""
 
@@ -163,6 +169,7 @@ class WasteDetector:
                 "category": cat,
                 "is_hazard": is_haz,
                 "is_waste": (door_id is not None),
+                "is_stationery": (name_lower in STATIONERY_CLASSES),
                 "is_enabled": is_enabled
             })
         return catalog
