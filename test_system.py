@@ -217,6 +217,72 @@ def test_transparent_object_enhancement():
     print("  -> Passed! Transparent CLAHE enhancement, sensitivity floor, and glassware labels verified.")
 
 
+def test_error_matrix_and_mse():
+    print("[TEST 8/8] Verifying MES / MSE Error Matrix & Classification Metrics...")
+    from error_matrix import ErrorMatrixTracker, DOOR_NAMES
+
+    test_file = "test_error_matrix.json"
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+    tracker = ErrorMatrixTracker(persistence_file=test_file)
+    # Reset to blank for deterministic unit test
+    tracker.reset()
+    assert tracker.total_samples == 0
+    assert tracker.matrix.shape == (5, 5)
+    assert tracker.multivariate_mse_matrix.shape == (5, 5)
+
+    # 1. Test Perfect Diagonal Classification
+    for door_id in range(1, 6):
+        tracker.record_evaluation(
+            actual_door=door_id,
+            predicted_door=door_id,
+            confidence=1.0,
+            class_name=f"test_item_{door_id}",
+            source="UNIT_TEST"
+        )
+
+    summary = tracker.get_summary()
+    assert summary["overall_accuracy_pct"] == 100.0, f"Expected 100%, got {summary['overall_accuracy_pct']}"
+    assert summary["chute_distance_mse"] == 0.0
+    assert summary["mes_kpis"]["hazard_safety_index_pct"] == 100.0
+
+    # 2. Test Misroute & Hazard Intercept Metric
+    # Actual Hazard (Door 1) misrouted to Recyclable (Door 4)
+    tracker.record_evaluation(
+        actual_door=1,
+        predicted_door=4,
+        confidence=0.85,
+        class_name="missed_knife",
+        source="UNIT_TEST"
+    )
+
+    summary = tracker.get_summary()
+    assert tracker.matrix[0, 3] == 1, "Expected cell (0, 3) to record misroute from Door 1 to 4"
+    assert summary["overall_mse"] > 0.0, "MSE should be positive after misclassification"
+    assert summary["chute_distance_mse"] > 0.0, "Chute distance MSE should be > 0"
+    assert summary["mes_kpis"]["hazard_safety_index_pct"] < 100.0, "Hazard intercept safety index must reflect missed hazard"
+
+    # 3. Test Benchmark Battery Generation
+    initial_samples = tracker.total_samples
+    benchmark_res = tracker.run_benchmark_battery(num_samples=50)
+    assert benchmark_res["total_evaluations"] == initial_samples + 50
+    assert len(benchmark_res["multivariate_mse_matrix"]) == 5
+    assert len(benchmark_res["matrix_rows"]) == 5
+
+    # 4. Test CSV Export
+    csv_text = tracker.export_csv()
+    assert "MES / MSE Error Matrix Audit Report" in csv_text
+    assert "CONFUSION / ERROR MATRIX" in csv_text
+    assert "MULTIVARIATE MSE ERROR COVARIANCE MATRIX" in csv_text
+
+    # Cleanup
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+    print("  -> Passed! 5x5 Error Matrix, MSE covariance, chute distance, and MES KPIs validated.")
+
+
 if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("    RUNNING AI WASTE SEGREGATION INTEGRATION TESTS")
@@ -229,7 +295,9 @@ if __name__ == "__main__":
     test_hazard_logger()
     test_headless_render()
     test_transparent_object_enhancement()
+    test_error_matrix_and_mse()
 
     print("\n" + "=" * 60)
-    print("    ALL INTEGRATION TESTS PASSED SUCCESSFULLY! [7/7]")
+    print("    ALL INTEGRATION TESTS PASSED SUCCESSFULLY! [8/8]")
     print("=" * 60 + "\n")
+

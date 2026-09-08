@@ -87,6 +87,19 @@
 
             <!-- Action Controls -->
             <div class="flex items-center gap-1.5 pl-1 border-l border-gray-800">
+                <!-- ERROR MATRIX & MSE BUTTON -->
+                <button onclick="openErrorMatrixModal()" title="View 5x5 Error Matrix, Multivariate MSE & Industrial KPIs"
+                    class="px-2.5 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 active:scale-95 text-emerald-300 border border-emerald-500/40 text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-table-cells text-[10px]"></i>
+                    <span>Error Matrix</span>
+                    <span id="navAccBadge" class="bg-emerald-500/20 text-emerald-200 text-[10px] px-1.5 py-0.2 rounded-full font-mono border border-emerald-500/30 hidden sm:inline" title="Overall Classification Accuracy">
+                        93.5%
+                    </span>
+                    <span id="navMseBadge" class="bg-cyan-950 text-cyan-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono border border-cyan-800 hidden md:inline" title="Mean Squared Error">
+                        MSE: 0.04
+                    </span>
+                </button>
+
                 <!-- LABEL FILTERS MODAL BUTTON -->
                 <button onclick="openFilterModal()" title="Configure objects to label and detect"
                     class="px-2.5 py-1.5 rounded-lg bg-cyan-950/70 hover:bg-cyan-900 active:scale-95 text-cyan-300 border border-cyan-500/40 text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
@@ -530,6 +543,318 @@
         </div>
     </div>
 
+    <!-- MES / MSE ERROR MATRIX MODAL -->
+    <div id="errorMatrixModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md transition-all font-sans">
+        <div class="bg-panelbg border border-gray-700/80 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            
+            <!-- MODAL HEADER -->
+            <div class="px-6 py-4 bg-cardbg border-b border-gray-800 flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-sm shadow-inner">
+                        <i class="fa-solid fa-table-cells"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-base font-bold text-gray-100 flex items-center gap-2 font-mono">
+                            MES / MSE Error Matrix &amp; Telemetry
+                            <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold">
+                                5x5 Matrix
+                            </span>
+                        </h3>
+                        <p class="text-[11px] text-gray-400">
+                            Classification Contingency Table, Multivariate Error Covariance (E[e&middot;e<sup>T</sup>]) &amp; Sorting Reliability KPIs
+                        </p>
+                    </div>
+                </div>
+                <button onclick="closeErrorMatrixModal()" class="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-400 hover:text-white flex items-center justify-center transition" aria-label="Close Error Matrix Modal">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- KEY STATS ROW (KPI CARDS) -->
+            <div class="px-6 py-3 bg-darkbg/90 border-b border-gray-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 font-mono text-xs">
+                <div class="bg-cardbg/80 border border-emerald-500/30 rounded-xl p-2 text-center shadow-sm">
+                    <span class="text-[10px] text-gray-400 block uppercase">Accuracy</span>
+                    <span id="emAccuracy" class="text-base font-bold text-emerald-400 font-mono">--%</span>
+                </div>
+                <div class="bg-cardbg/80 border border-cyan-500/30 rounded-xl p-2 text-center shadow-sm">
+                    <span class="text-[10px] text-gray-400 block uppercase">Scalar MSE</span>
+                    <span id="emMse" class="text-base font-bold text-cyan-300 font-mono">--</span>
+                </div>
+                <div class="bg-cardbg/80 border border-yellow-500/30 rounded-xl p-2 text-center shadow-sm">
+                    <span class="text-[10px] text-gray-400 block uppercase">Mean Error (ME)</span>
+                    <span id="emMe" class="text-base font-bold text-yellow-300 font-mono">--</span>
+                </div>
+                <div class="bg-cardbg/80 border border-indigo-500/30 rounded-xl p-2 text-center shadow-sm">
+                    <span class="text-[10px] text-gray-400 block uppercase">RMSE</span>
+                    <span id="emRmse" class="text-base font-bold text-indigo-300 font-mono">--</span>
+                </div>
+                <div class="bg-cardbg/80 border border-purple-500/30 rounded-xl p-2 text-center shadow-sm">
+                    <span class="text-[10px] text-gray-400 block uppercase">Chute MSE</span>
+                    <span id="emChuteMse" class="text-base font-bold text-purple-300 font-mono">--</span>
+                </div>
+                <div class="bg-cardbg/80 border border-red-500/30 rounded-xl p-2 text-center shadow-sm">
+                    <span class="text-[10px] text-gray-400 block uppercase">HIP Safety</span>
+                    <span id="emHazardIndex" class="text-base font-bold text-red-400 font-mono">--%</span>
+                </div>
+            </div>
+
+            <!-- TAB SELECTOR BAR -->
+            <div class="px-6 py-2 bg-cardbg/70 border-b border-gray-800 flex items-center gap-2 overflow-x-auto text-xs font-mono">
+                <button onclick="switchErrorMatrixTab('matrix')" id="emTabBtn-matrix" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-table-cells"></i> 5x5 Error Matrix
+                </button>
+                <button onclick="switchErrorMatrixTab('mse')" id="emTabBtn-mse" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 border border-gray-700 hover:text-gray-200 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-chart-line"></i> Multivariate MSE Matrix
+                </button>
+                <button onclick="switchErrorMatrixTab('mes')" id="emTabBtn-mes" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 border border-gray-700 hover:text-gray-200 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-industry"></i> MES Chute KPIs
+                </button>
+                <button onclick="switchErrorMatrixTab('history')" id="emTabBtn-history" class="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 border border-gray-700 hover:text-gray-200 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Evaluation History
+                </button>
+            </div>
+
+            <!-- TAB CONTENT PANES -->
+            <div class="p-6 overflow-y-auto max-h-[520px] flex-1 font-mono text-xs">
+                
+                <!-- TAB 1: 5X5 ERROR / CONFUSION MATRIX -->
+                <div id="emTabPane-matrix" class="space-y-4">
+                    <div class="bg-cardbg border border-gray-800 rounded-xl p-4 overflow-x-auto shadow-inner">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-[11px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <i class="fa-solid fa-arrows-split-up-and-left text-cyan-400"></i>
+                                Ground Truth vs. Predicted Sorting Chute
+                            </span>
+                            <span class="text-[10px] text-gray-500">Green = True Positive Match | Red/Amber = Misrouted Chute</span>
+                        </div>
+
+                        <!-- 5x5 HTML Table -->
+                        <table class="w-full text-center border-collapse">
+                            <thead>
+                                <tr class="text-[10px] text-gray-400 border-b border-gray-800">
+                                    <th class="p-2 text-left">ACTUAL \ PRED</th>
+                                    <th class="p-2 text-red-400">DOOR 1<br><span class="text-[9px] text-gray-500 font-normal">HAZARD</span></th>
+                                    <th class="p-2 text-cyan-400">DOOR 2<br><span class="text-[9px] text-gray-500 font-normal">E-WASTE</span></th>
+                                    <th class="p-2 text-yellow-400">DOOR 3<br><span class="text-[9px] text-gray-500 font-normal">PAPER</span></th>
+                                    <th class="p-2 text-emerald-400">DOOR 4<br><span class="text-[9px] text-gray-500 font-normal">RECYCL</span></th>
+                                    <th class="p-2 text-orange-400">DOOR 5<br><span class="text-[9px] text-gray-500 font-normal">ORGANIC</span></th>
+                                    <th class="p-2 text-gray-300 font-bold border-l border-gray-800">TOTAL</th>
+                                    <th class="p-2 text-emerald-400 font-bold">RECALL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="emMatrixBody" class="divide-y divide-gray-800/60">
+                                <!-- Populated dynamically by renderErrorMatrix -->
+                            </tbody>
+                            <tfoot id="emMatrixFoot" class="border-t-2 border-gray-700/80 text-[10px]">
+                                <!-- Populated dynamically -->
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- Per-Category Classification Performance Table -->
+                    <div class="bg-cardbg border border-gray-800 rounded-xl p-4 shadow-inner">
+                        <h4 class="text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                            <i class="fa-solid fa-list-check text-emerald-400"></i> Category Quality &amp; Error Distribution
+                        </h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-[11px]">
+                                <thead>
+                                    <tr class="text-gray-400 border-b border-gray-800 pb-1 text-[10px]">
+                                        <th class="py-1.5">CHUTE</th>
+                                        <th class="py-1.5">CATEGORY</th>
+                                        <th class="py-1.5 text-center">SAMPLES</th>
+                                        <th class="py-1.5 text-center">PRECISION</th>
+                                        <th class="py-1.5 text-center">RECALL</th>
+                                        <th class="py-1.5 text-center">F1-SCORE</th>
+                                        <th class="py-1.5 text-center">STREAM MSE</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="emCategoryMetricsBody" class="divide-y divide-gray-800/50">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: MULTIVARIATE MSE MATRIX -->
+                <div id="emTabPane-mse" class="hidden space-y-4">
+                    <div class="bg-cardbg border border-gray-800 rounded-xl p-4 shadow-inner">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h4 class="text-xs font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+                                    <i class="fa-solid fa-chart-line"></i> Multivariate MSE Error Covariance Matrix (E[e&middot;e<sup>T</sup>])
+                                </h4>
+                                <p class="text-[10px] text-gray-400 mt-0.5">
+                                    Diagonal entries represent per-stream squared error variances; off-diagonal elements measure cross-category error covariances.
+                                </p>
+                            </div>
+                            <span class="text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800 px-2 py-0.5 rounded">
+                                M &isin; &reals;<sup>5 &times; 5</sup>
+                            </span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-center border-collapse text-xs">
+                                <thead>
+                                    <tr class="text-[10px] text-gray-400 border-b border-gray-800">
+                                        <th class="p-2 text-left">STREAM</th>
+                                        <th class="p-2 text-red-400">DOOR 1</th>
+                                        <th class="p-2 text-cyan-400">DOOR 2</th>
+                                        <th class="p-2 text-yellow-400">DOOR 3</th>
+                                        <th class="p-2 text-emerald-400">DOOR 4</th>
+                                        <th class="p-2 text-orange-400">DOOR 5</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="emMseMatrixBody" class="divide-y divide-gray-800/60 font-mono">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Mathematical Formula Explainer Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="bg-cardbg border border-gray-800/80 rounded-xl p-3">
+                            <span class="text-cyan-400 font-bold text-xs block mb-1">Probability Calibration MSE:</span>
+                            <p class="text-gray-400 text-[11px] leading-relaxed">
+                                Measures mean squared deviation between the model's confidence distribution and true binary classification one-hot target:
+                            </p>
+                            <div class="mt-2 bg-darkbg/90 p-2 rounded text-cyan-300 font-mono text-[11px] border border-gray-800">
+                                MSE = (1 / 5N) &sum; &sum; (y<sub>ic</sub> - p&#770;<sub>ic</sub>)<sup>2</sup>
+                            </div>
+                        </div>
+                        <div class="bg-cardbg border border-gray-800/80 rounded-xl p-3">
+                            <span class="text-purple-400 font-bold text-xs block mb-1">Chute Divert Distance MSE:</span>
+                            <p class="text-gray-400 text-[11px] leading-relaxed">
+                                Penalizes physical distance misdirection along the conveyor belt chutes (e.g. diverting a Door 1 hazard to Door 5 incurs a 16x penalty):
+                            </p>
+                            <div class="mt-2 bg-darkbg/90 p-2 rounded text-purple-300 font-mono text-[11px] border border-gray-800">
+                                MSE<sub>chute</sub> = (1 / N) &sum; (d<sub>actual</sub> - d<sub>pred</sub>)<sup>2</sup>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: MES INDUSTRIAL CHUTE KPIS -->
+                <div id="emTabPane-mes" class="hidden space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="bg-cardbg border border-emerald-500/30 rounded-xl p-3.5">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-[11px] text-gray-400 uppercase font-bold">Chute Divert Accuracy</span>
+                                <i class="fa-solid fa-check-double text-emerald-400"></i>
+                            </div>
+                            <span id="mesDivertAcc" class="text-2xl font-bold text-emerald-300 font-mono">--%</span>
+                            <p class="text-[10px] text-gray-500 mt-1">Percentage of physical items routed into their correct designated category bins.</p>
+                        </div>
+                        <div class="bg-cardbg border border-red-500/30 rounded-xl p-3.5">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-[11px] text-gray-400 uppercase font-bold">Hazard Intercept Index</span>
+                                <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+                            </div>
+                            <span id="mesHazardSafety" class="text-2xl font-bold text-red-400 font-mono">--%</span>
+                            <p class="text-[10px] text-gray-500 mt-1">Door 1 containment rate. Zero false negatives guarantee operator safety.</p>
+                        </div>
+                        <div class="bg-cardbg border border-indigo-500/30 rounded-xl p-3.5">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-[11px] text-gray-400 uppercase font-bold">Sorting Reliability Index</span>
+                                <i class="fa-solid fa-shield-halved text-indigo-400"></i>
+                            </div>
+                            <span id="mesSri" class="text-2xl font-bold text-indigo-300 font-mono">-- / 100</span>
+                            <p class="text-[10px] text-gray-500 mt-1">Weighted operational score penalizing hazard misses 3x higher than misroutes.</p>
+                        </div>
+                    </div>
+
+                    <!-- Divert Fault Rate Details -->
+                    <div class="bg-cardbg border border-gray-800 rounded-xl p-4">
+                        <h4 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                            <i class="fa-solid fa-gauge-high text-cyan-400"></i> Factory Floor Operational Telemetry
+                        </h4>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                            <div class="bg-darkbg/80 border border-gray-800 p-2.5 rounded-lg">
+                                <span class="text-[10px] text-gray-500 block">Total Audited Items</span>
+                                <span id="mesAuditedItems" class="text-sm font-bold text-gray-200 font-mono">--</span>
+                            </div>
+                            <div class="bg-darkbg/80 border border-gray-800 p-2.5 rounded-lg">
+                                <span class="text-[10px] text-gray-500 block">Divert Error Rate</span>
+                                <span id="mesDivertErrorRate" class="text-sm font-bold text-amber-400 font-mono">--%</span>
+                            </div>
+                            <div class="bg-darkbg/80 border border-gray-800 p-2.5 rounded-lg">
+                                <span class="text-[10px] text-gray-500 block">Hazard Miss Rate</span>
+                                <span id="mesHazardMissRate" class="text-sm font-bold text-red-400 font-mono">0.0%</span>
+                            </div>
+                            <div class="bg-darkbg/80 border border-gray-800 p-2.5 rounded-lg">
+                                <span class="text-[10px] text-gray-500 block">Mean Error Bias (ME)</span>
+                                <span id="mesMeanBias" class="text-sm font-bold text-cyan-300 font-mono">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: RECENT EVALUATION HISTORY -->
+                <div id="emTabPane-history" class="hidden space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Latest Evaluated Samples (Live Verification Log)
+                        </span>
+                        <span class="text-[10px] text-gray-500">Showing last 15 entries</span>
+                    </div>
+
+                    <div class="overflow-x-auto bg-cardbg border border-gray-800 rounded-xl">
+                        <table class="w-full text-left text-[11px]">
+                            <thead>
+                                <tr class="text-gray-400 border-b border-gray-800 pb-1 text-[10px]">
+                                    <th class="p-2">TIME</th>
+                                    <th class="p-2">ITEM</th>
+                                    <th class="p-2">ACTUAL CHUTE</th>
+                                    <th class="p-2">PREDICTED</th>
+                                    <th class="p-2">CONF</th>
+                                    <th class="p-2">STATUS</th>
+                                    <th class="p-2 text-right">SQ ERROR (e<sup>2</sup>)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="emHistoryTableBody" class="divide-y divide-gray-800/50">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- MODAL FOOTER -->
+            <div class="px-6 py-3.5 bg-cardbg border-t border-gray-800 flex items-center justify-between flex-wrap gap-2 font-mono text-xs">
+                <div class="flex items-center gap-2">
+                    <span class="text-gray-400">Evaluated:</span>
+                    <span id="emTotalEvaluatedBadge" class="bg-gray-800 text-gray-200 border border-gray-700 px-2 py-0.5 rounded font-bold">
+                        120 items
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="runBenchmarkBattery()" id="btnRunBenchmark" title="Run 100-sample automated validation benchmark"
+                        class="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white font-bold transition flex items-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-play text-[10px]" id="runBenchmarkIcon"></i>
+                        <span>Run Benchmark (100)</span>
+                    </button>
+                    <a href="/api/error_matrix/export" title="Export CSV audit report"
+                        class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white border border-gray-700 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-download text-[10px]"></i>
+                        <span>Export CSV</span>
+                    </a>
+                    <button onclick="resetErrorMatrix()" title="Reset matrix counts and history"
+                        class="px-3 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 active:scale-95 text-red-300 border border-red-500/40 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-trash-can text-[10px]"></i>
+                        <span>Reset</span>
+                    </button>
+                    <button onclick="closeErrorMatrixModal()" class="px-4 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-bold transition">
+                        Close
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
     <!-- JAVASCRIPT POLLING & INTERACTION -->
     <script>
         // Global Filter State Cache
@@ -550,6 +875,14 @@
                 const upEl = document.getElementById('uptimeVal');
                 if (upEl) upEl.innerText = data.uptime;
                 document.getElementById('totalSortedCount').innerText = 'Total: ' + data.total_sorted;
+                if (data.error_matrix_accuracy !== undefined) {
+                    const navAcc = document.getElementById('navAccBadge');
+                    if (navAcc) navAcc.innerText = data.error_matrix_accuracy.toFixed(1) + '%';
+                }
+                if (data.error_matrix_mse !== undefined) {
+                    const navMse = document.getElementById('navMseBadge');
+                    if (navMse) navMse.innerText = 'MSE: ' + data.error_matrix_mse.toFixed(3);
+                }
                 document.getElementById('currentDetectedTag').innerText = data.current_detected_label || 'Monitoring (Present object to camera)...';
 
                 // Scanner badge
@@ -1040,6 +1373,262 @@
             if (modalBadge) modalBadge.innerText = `${enabledCount} / ${totalCount} Framed`;
             const statusText = document.getElementById('modalStatusText');
             if (statusText) statusText.innerText = `${enabledCount} of ${totalCount} objects selected to display rectangular frames`;
+        }
+
+
+        // -------------------------------------------------------------
+        // MES / MSE ERROR MATRIX INTERACTIVITY
+        // -------------------------------------------------------------
+        let currentEmTab = 'matrix';
+
+        async function openErrorMatrixModal() {
+            const modal = document.getElementById('errorMatrixModal');
+            if (modal) modal.classList.remove('hidden');
+            await loadErrorMatrixData();
+        }
+
+        function closeErrorMatrixModal() {
+            const modal = document.getElementById('errorMatrixModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function switchErrorMatrixTab(tabName) {
+            currentEmTab = tabName;
+            const tabs = ['matrix', 'mse', 'mes', 'history'];
+            tabs.forEach(t => {
+                const pane = document.getElementById(`emTabPane-${t}`);
+                const btn = document.getElementById(`emTabBtn-${t}`);
+                if (pane) {
+                    if (t === tabName) pane.classList.remove('hidden');
+                    else pane.classList.add('hidden');
+                }
+                if (btn) {
+                    if (t === tabName) {
+                        btn.className = 'px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold transition flex items-center gap-1.5';
+                    } else {
+                        btn.className = 'px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 border border-gray-700 hover:text-gray-200 transition flex items-center gap-1.5';
+                    }
+                }
+            });
+        }
+
+        async function loadErrorMatrixData() {
+            try {
+                const res = await fetch('/api/error_matrix');
+                const data = await res.json();
+                renderErrorMatrix(data);
+            } catch (err) {
+                console.error('Error loading error matrix:', err);
+            }
+        }
+
+        function renderErrorMatrix(data) {
+            if (!data) return;
+
+            // 1. Update Top KPI Cards
+            document.getElementById('emAccuracy').innerText = (data.overall_accuracy_pct || 0).toFixed(1) + '%';
+            document.getElementById('emMse').innerText = (data.overall_mse || 0).toFixed(4);
+            document.getElementById('emMe').innerText = (data.overall_me || 0).toFixed(4);
+            document.getElementById('emRmse').innerText = (data.overall_rmse || 0).toFixed(4);
+            document.getElementById('emChuteMse').innerText = (data.chute_distance_mse || 0).toFixed(3);
+            document.getElementById('emHazardIndex').innerText = (data.mes_kpis?.hazard_safety_index_pct || 100.0).toFixed(1) + '%';
+            document.getElementById('emTotalEvaluatedBadge').innerText = `${data.total_evaluations || 0} items`;
+
+            // Update Navbar badges
+            const navAcc = document.getElementById('navAccBadge');
+            if (navAcc) navAcc.innerText = (data.overall_accuracy_pct || 0).toFixed(1) + '%';
+            const navMse = document.getElementById('navMseBadge');
+            if (navMse) navMse.innerText = 'MSE: ' + (data.overall_mse || 0).toFixed(3);
+
+            // 2. Render 5x5 Contingency Matrix Table
+            const body = document.getElementById('emMatrixBody');
+            let bodyHtml = '';
+            const colTotals = [0, 0, 0, 0, 0];
+            const colTruePositives = [0, 0, 0, 0, 0];
+
+            if (data.matrix_rows) {
+                data.matrix_rows.forEach((row, rIdx) => {
+                    const doorColors = {
+                        1: 'text-red-400',
+                        2: 'text-cyan-400',
+                        3: 'text-yellow-400',
+                        4: 'text-emerald-400',
+                        5: 'text-orange-400'
+                    };
+                    const colorClass = doorColors[row.door_id] || 'text-gray-300';
+                    const categoryData = data.categories?.find(c => c.door_id === row.door_id) || {};
+                    const recall = categoryData.recall !== undefined ? categoryData.recall.toFixed(1) + '%' : '--';
+
+                    bodyHtml += `<tr>`;
+                    bodyHtml += `<td class="p-2.5 text-left font-bold ${colorClass}">DOOR ${row.door_id} <span class="text-[9px] text-gray-500 font-normal">(${row.name})</span></td>`;
+
+                    row.cells.forEach((cell, cIdx) => {
+                        colTotals[cIdx] += cell.count;
+                        if (cell.is_diagonal) colTruePositives[cIdx] += cell.count;
+
+                        let cellStyle = 'bg-gray-900/40 text-gray-500 border border-gray-800/40';
+                        if (cell.is_diagonal) {
+                            cellStyle = 'bg-emerald-950/60 text-emerald-300 font-bold border border-emerald-500/40 shadow-inner';
+                        } else if (cell.count > 0) {
+                            cellStyle = 'bg-red-950/40 text-red-300 font-bold border border-red-500/40';
+                        }
+
+                        bodyHtml += `
+                        <td class="p-2">
+                            <div class="${cellStyle} rounded-lg py-1.5 px-1 transition hover:scale-105">
+                                <span class="text-xs block leading-none font-mono">${cell.count}</span>
+                                <span class="text-[9px] text-gray-400 block mt-0.5">${cell.percent}%</span>
+                            </div>
+                        </td>`;
+                    });
+
+                    bodyHtml += `<td class="p-2.5 font-bold text-gray-200 border-l border-gray-800">${row.total}</td>`;
+                    bodyHtml += `<td class="p-2.5 font-bold text-emerald-400 font-mono">${recall}</td>`;
+                    bodyHtml += `</tr>`;
+                });
+            }
+            if (body) body.innerHTML = bodyHtml;
+
+            // Footer row for Predicted Totals and Precision
+            const foot = document.getElementById('emMatrixFoot');
+            let footHtml = `
+            <tr class="text-gray-300">
+                <td class="p-2 text-left font-bold">PRED TOTAL</td>
+                <td class="p-2 text-red-400 font-bold">${colTotals[0]}</td>
+                <td class="p-2 text-cyan-400 font-bold">${colTotals[1]}</td>
+                <td class="p-2 text-yellow-400 font-bold">${colTotals[2]}</td>
+                <td class="p-2 text-emerald-400 font-bold">${colTotals[3]}</td>
+                <td class="p-2 text-orange-400 font-bold">${colTotals[4]}</td>
+                <td class="p-2 font-black text-gray-100 border-l border-gray-800">${data.total_evaluations}</td>
+                <td class="p-2 text-emerald-300 font-bold font-mono">${(data.overall_accuracy_pct || 0).toFixed(1)}%</td>
+            </tr>
+            <tr class="text-gray-400 text-[9px]">
+                <td class="p-2 text-left font-bold text-gray-300">PRECISION</td>`;
+            for (let i = 0; i < 5; i++) {
+                const prec = colTotals[i] > 0 ? ((colTruePositives[i] / colTotals[i]) * 100).toFixed(1) + '%' : '--';
+                footHtml += `<td class="p-2 text-cyan-300 font-mono font-bold">${prec}</td>`;
+            }
+            footHtml += `<td class="p-2 border-l border-gray-800 text-gray-500">--</td>`;
+            footHtml += `<td class="p-2 text-emerald-400 font-mono font-bold">ACC</td></tr>`;
+            if (foot) foot.innerHTML = footHtml;
+
+            // 3. Render Per-Category Metrics Table
+            const catBody = document.getElementById('emCategoryMetricsBody');
+            let catHtml = '';
+            if (data.categories) {
+                data.categories.forEach(c => {
+                    const doorColors = { 1: 'text-red-400', 2: 'text-cyan-400', 3: 'text-yellow-400', 4: 'text-emerald-400', 5: 'text-orange-400' };
+                    const col = doorColors[c.door_id] || 'text-gray-200';
+                    catHtml += `
+                    <tr>
+                        <td class="py-2 font-bold ${col}">Door ${c.door_id}</td>
+                        <td class="py-2 text-gray-200">${c.name}</td>
+                        <td class="py-2 text-center text-gray-400 font-mono">${c.actual_count}</td>
+                        <td class="py-2 text-center font-bold text-cyan-300 font-mono">${c.precision}%</td>
+                        <td class="py-2 text-center font-bold text-emerald-400 font-mono">${c.recall}%</td>
+                        <td class="py-2 text-center font-bold text-yellow-300 font-mono">${c.f1_score}%</td>
+                        <td class="py-2 text-center text-indigo-300 font-mono">${c.class_mse}</td>
+                    </tr>`;
+                });
+            }
+            if (catBody) catBody.innerHTML = catHtml;
+
+            // 4. Render Multivariate MSE Matrix
+            const mseBody = document.getElementById('emMseMatrixBody');
+            let mseHtml = '';
+            if (data.multivariate_mse_matrix) {
+                const streamNames = ['Door 1 (Hazard)', 'Door 2 (E-Waste)', 'Door 3 (Paper)', 'Door 4 (Recyclable)', 'Door 5 (Organic)'];
+                data.multivariate_mse_matrix.forEach((row, rIdx) => {
+                    mseHtml += `<tr>`;
+                    mseHtml += `<td class="p-2 text-left font-bold text-gray-300">${streamNames[rIdx]}</td>`;
+                    row.forEach((val, cIdx) => {
+                        const isDiag = (rIdx === cIdx);
+                        const cellClass = isDiag
+                            ? 'bg-cyan-950/60 text-cyan-300 font-bold border border-cyan-500/40'
+                            : (Math.abs(val) > 0.001 ? 'bg-gray-900/50 text-gray-300 border border-gray-800' : 'bg-gray-900/20 text-gray-600');
+                        mseHtml += `<td class="p-2"><div class="${cellClass} rounded-lg py-1 px-1.5 font-mono">${val.toFixed(4)}</div></td>`;
+                    });
+                    mseHtml += `</tr>`;
+                });
+            }
+            if (mseBody) mseBody.innerHTML = mseHtml;
+
+            // 5. Render MES Industrial Chute KPIs
+            const kpi = data.mes_kpis || {};
+            const mesDivert = document.getElementById('mesDivertAcc');
+            if (mesDivert) mesDivert.innerText = (kpi.chute_divert_accuracy_pct || 0).toFixed(1) + '%';
+            const mesHaz = document.getElementById('mesHazardSafety');
+            if (mesHaz) mesHaz.innerText = (kpi.hazard_safety_index_pct || 100.0).toFixed(1) + '%';
+            const mesSri = document.getElementById('mesSri');
+            if (mesSri) mesSri.innerText = (kpi.sorting_reliability_index || 0).toFixed(1) + ' / 100';
+            const mesAudit = document.getElementById('mesAuditedItems');
+            if (mesAudit) mesAudit.innerText = kpi.total_items_audited || 0;
+            const mesErrRate = document.getElementById('mesDivertErrorRate');
+            if (mesErrRate) mesErrRate.innerText = (kpi.divert_error_rate_pct || 0).toFixed(1) + '%';
+            const mesHazMiss = document.getElementById('mesHazardMissRate');
+            if (mesHazMiss) mesHazMiss.innerText = (kpi.hazard_miss_rate_pct || 0).toFixed(1) + '%';
+            const mesBias = document.getElementById('mesMeanBias');
+            if (mesBias) mesBias.innerText = (data.overall_me || 0).toFixed(4);
+
+            // 6. Render Recent Records
+            const historyBody = document.getElementById('emHistoryTableBody');
+            let histHtml = '';
+            if (data.recent_records && data.recent_records.length > 0) {
+                data.recent_records.forEach(r => {
+                    const statusBadge = r.is_correct
+                        ? `<span class="bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[9px] font-bold">MATCH</span>`
+                        : `<span class="bg-red-950 text-red-300 border border-red-500/40 px-1.5 py-0.5 rounded text-[9px] font-bold">ERROR</span>`;
+
+                    histHtml += `
+                    <tr>
+                        <td class="p-2 text-gray-500 font-mono">${r.timestamp}</td>
+                        <td class="p-2 text-gray-200 font-bold">${r.class_name}</td>
+                        <td class="p-2 text-cyan-300 font-mono">Door ${r.actual_door}</td>
+                        <td class="p-2 text-yellow-300 font-mono">Door ${r.predicted_door}</td>
+                        <td class="p-2 font-mono">${Math.round(r.confidence * 100)}%</td>
+                        <td class="p-2">${statusBadge}</td>
+                        <td class="p-2 text-right font-mono text-indigo-300">${r.squared_error}</td>
+                    </tr>`;
+                });
+            } else {
+                histHtml = `<tr><td colspan="7" class="p-4 text-center text-gray-500">No evaluation records yet. Click "Run Benchmark" to test.</td></tr>`;
+            }
+            if (historyBody) historyBody.innerHTML = histHtml;
+        }
+
+        async function runBenchmarkBattery() {
+            const icon = document.getElementById('runBenchmarkIcon');
+            if (icon) icon.className = 'fa-solid fa-spinner fa-spin text-[10px]';
+            try {
+                const res = await fetch('/api/error_matrix/run_benchmark', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ num_samples: 100 })
+                });
+                const data = await res.json();
+                if (data.summary) {
+                    renderErrorMatrix(data.summary);
+                }
+            } catch (err) {
+                console.error('Error running benchmark:', err);
+            } finally {
+                setTimeout(() => {
+                    if (icon) icon.className = 'fa-solid fa-play text-[10px]';
+                }, 400);
+            }
+        }
+
+        async function resetErrorMatrix() {
+            if (!confirm('Are you sure you want to reset the Error Matrix counters and history?')) return;
+            try {
+                const res = await fetch('/api/error_matrix/reset', { method: 'POST' });
+                const data = await res.json();
+                if (data.summary) {
+                    renderErrorMatrix(data.summary);
+                }
+            } catch (err) {
+                console.error('Error resetting error matrix:', err);
+            }
         }
 
         // Initial setup

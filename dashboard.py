@@ -13,7 +13,7 @@ from collections import deque
 from datetime import datetime
 from typing import Dict, List, Optional
 import cv2
-from flask import Flask, Response, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, make_response, render_template, request, send_file
 import numpy as np
 
 from config import (
@@ -27,6 +27,7 @@ from config import (
 )
 from detector import WasteDetector
 from door_system import DoorSystem
+from error_matrix import error_matrix_tracker
 from logger import WasteLogger
 
 app = Flask(__name__, template_folder="templates")
@@ -407,7 +408,10 @@ def api_state():
             "recent_items": list(state.recent_items),
             "show_rectangle_labels": state.show_rectangle_labels,
             "framed_objects_count": len([c for c in detector.get_class_catalog() if c["is_enabled"]]),
-            "total_objects_count": 80
+            "total_objects_count": 80,
+            "error_matrix_accuracy": error_matrix_tracker.get_summary()["overall_accuracy_pct"],
+            "error_matrix_mse": error_matrix_tracker.get_summary()["overall_mse"],
+            "error_matrix_total": error_matrix_tracker.get_summary()["total_evaluations"]
         })
 
 
@@ -631,6 +635,61 @@ def api_download_log():
     if os.path.exists(HAZARD_LOG_FILE):
         return send_file(HAZARD_LOG_FILE, as_attachment=True, download_name="hazard_log.csv")
     return jsonify({"error": "No hazard events recorded yet"}), 404
+
+
+# -----------------------------------------------------------------------------
+# MES / MSE Error Matrix API Endpoints
+# -----------------------------------------------------------------------------
+@app.route('/api/error_matrix', methods=['GET'])
+def api_get_error_matrix():
+    """Retrieve full 5x5 Error Matrix, MSE metrics, and MES operational KPIs."""
+    return jsonify(error_matrix_tracker.get_summary())
+
+
+@app.route('/api/error_matrix/record', methods=['POST'])
+def api_record_error_matrix():
+    """Record a verified item evaluation (Ground Truth vs Model Prediction)."""
+    data = request.get_json(force=True, silent=True) or {}
+    actual_door = int(data.get('actual_door', 1))
+    predicted_door = int(data.get('predicted_door', actual_door))
+    confidence = float(data.get('confidence', 0.90))
+    class_name = str(data.get('class_name', 'Verified Item'))
+    source = str(data.get('source', 'MANUAL_VERIFY'))
+
+    summary = error_matrix_tracker.record_evaluation(
+        actual_door=actual_door,
+        predicted_door=predicted_door,
+        confidence=confidence,
+        class_name=class_name,
+        source=source
+    )
+    return jsonify({"success": True, "summary": summary})
+
+
+@app.route('/api/error_matrix/run_benchmark', methods=['POST'])
+def api_run_benchmark():
+    """Run automated 100-sample benchmark battery to populate Error Matrix & MSE."""
+    data = request.get_json(force=True, silent=True) or {}
+    num_samples = int(data.get('num_samples', 100))
+    summary = error_matrix_tracker.run_benchmark_battery(num_samples=num_samples)
+    return jsonify({"success": True, "summary": summary})
+
+
+@app.route('/api/error_matrix/reset', methods=['POST'])
+def api_reset_error_matrix():
+    """Reset the Error Matrix and MSE tracking history."""
+    error_matrix_tracker.reset()
+    return jsonify({"success": True, "summary": error_matrix_tracker.get_summary()})
+
+
+@app.route('/api/error_matrix/export', methods=['GET'])
+def api_export_error_matrix():
+    """Export complete Error Matrix, MSE metrics, and classification report as CSV."""
+    csv_data = error_matrix_tracker.export_csv()
+    response = make_response(csv_data)
+    response.headers["Content-Disposition"] = "attachment; filename=mes_mse_error_matrix.csv"
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    return response
 
 
 def run_server(host="0.0.0.0", port=5000):

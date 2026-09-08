@@ -41,3 +41,4 @@ Desktop.ini
 # Runtime session logs
 session_report.txt
 hazard_log.csv
+error_matrix.json
